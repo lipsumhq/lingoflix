@@ -35,8 +35,23 @@ export function historyAsTimedLines(lines: readonly ObservedLine[]): TimedLine[]
   return merged;
 }
 
+/** Lines that start within ON_LINE_SLACK_MS of the first line of their group (two speakers) form one line. */
+function collapseTogetherStarts(lines: readonly TimedLine[]): TimedLine[] {
+  const collapsed: TimedLine[] = [];
+  for (const line of lines) {
+    const group = collapsed.at(-1);
+    if (group && line.startMs - group.startMs <= ON_LINE_SLACK_MS) {
+      group.endMs = Math.max(group.endMs, line.endMs);
+    } else {
+      collapsed.push({ ...line });
+    }
+  }
+  return collapsed;
+}
+
 /** Spec §5.1.1 Previous line: inside a line → the line before it; between lines → the most recent line. */
-export function previousLineStart(lines: readonly TimedLine[], atMs: number): number | null {
+export function previousLineStart(input: readonly TimedLine[], atMs: number): number | null {
+  const lines = collapseTogetherStarts(input);
   let latest = -1;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.startMs <= atMs + ON_LINE_SLACK_MS) latest = i;
@@ -49,7 +64,7 @@ export function previousLineStart(lines: readonly TimedLine[], atMs: number): nu
 }
 
 /** Spec §5.1.1 Next line: the first line that starts after now. */
-export function nextLineStart(lines: readonly TimedLine[], atMs: number): number | null {
-  for (const line of lines) if (line.startMs > atMs + ON_LINE_SLACK_MS) return line.startMs;
+export function nextLineStart(input: readonly TimedLine[], atMs: number): number | null {
+  for (const line of collapseTogetherStarts(input)) if (line.startMs > atMs + ON_LINE_SLACK_MS) return line.startMs;
   return null;
 }

@@ -32,16 +32,36 @@ export interface LineDetails {
  */
 export function findCue(cues: readonly Cue[], normalizedLine: string, atMs: number, toleranceMs = CUE_MATCH_TOLERANCE_MS): number {
   if (!normalizedLine) return -1;
+  let exact = -1;
+  let exactGap = Number.POSITIVE_INFINITY;
   let contained = -1;
+  let containedGap = Number.POSITIVE_INFINITY;
   for (let i = 0; i < cues.length; i++) {
     const cue = cues[i]!;
     if (cue.startMs - toleranceMs > atMs) break; // cues are sorted by start
     if (cue.endMs + toleranceMs < atMs) continue;
     const text = normalizeLine(cue.text);
-    if (text === normalizedLine) return i;
-    if (contained < 0 && text && normalizedLine.includes(text)) contained = i;
+    const gap = cueGap(cue, atMs);
+    if (text === normalizedLine) {
+      if (gap < exactGap) {
+        exact = i;
+        exactGap = gap;
+      }
+    } else if (text && normalizedLine.includes(text)) {
+      if (gap < containedGap) {
+        contained = i;
+        containedGap = gap;
+      }
+    }
   }
-  return contained;
+  return exact >= 0 ? exact : contained;
+}
+
+/** Distance from `atMs` to a cue's time range: 0 while it is shown, else the gap to the nearer edge. */
+function cueGap(cue: Cue, atMs: number): number {
+  if (atMs < cue.startMs) return cue.startMs - atMs;
+  if (atMs > cue.endMs) return atMs - cue.endMs;
+  return 0;
 }
 
 /** Spec §8.2 validation: a subtitle file is used only if it has the line Netflix displayed, at that time. */

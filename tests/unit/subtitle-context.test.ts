@@ -79,6 +79,16 @@ describe('findCue / trackMatchesLine', () => {
   });
 });
 
+  it('picks the nearest of repeated identical lines', () => {
+    const cues: Cue[] = [
+      { startMs: 1000, endMs: 2000, text: 'Yes.' },
+      { startMs: 3000, endMs: 3500, text: 'Yes.' },
+    ];
+    expect(findCue(cues, 'Yes.', 3100)).toBe(1);
+    expect(findCue(cues, 'Yes.', 1900)).toBe(0);
+    expect(findCue(cues, 'Yes.', 2600)).toBe(1); // 400 ms before the second, 600 ms after the first
+  });
+
 describe('describeLine', () => {
   it('uses up to 6 cues before and after, and the cue timing', () => {
     const h = observeAll([['Line 7', 22_100]]);
@@ -144,6 +154,21 @@ describe('line navigation', () => {
     expect(nextLineStart(lines, 22_500)).toBe(25_000);
     expect(nextLineStart(lines, 22_000)).toBe(25_000); // just jumped to Line 7 → Line 8
     expect(nextLineStart(lines, 50_000)).toBeNull();
+  });
+
+  it('treats lines starting together (two speakers) as one line, so presses keep walking', () => {
+    const overlapping = [
+      { startMs: 1000, endMs: 3000 },
+      { startMs: 1200, endMs: 3200 },
+      { startMs: 4000, endMs: 5000 },
+      { startMs: 6000, endMs: 7000 },
+    ];
+    expect(previousLineStart(overlapping, 6500)).toBe(4000);
+    expect(previousLineStart(overlapping, 4000)).toBe(1000);
+    expect(previousLineStart(overlapping, 1000)).toBeNull();
+    expect(nextLineStart(overlapping, 1000)).toBe(4000);
+    expect(previousLineStart(overlapping, 3100)).toBeNull(); // still inside the first pair (ends 3200)
+    expect(previousLineStart(overlapping, 5500)).toBe(4000); // between lines → the most recent one
   });
 
   it('history lines start 300 ms early, merge rewatched duplicates, and skip untimed lines', () => {
