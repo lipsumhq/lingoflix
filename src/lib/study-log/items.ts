@@ -153,11 +153,15 @@ let conversion: Promise<number> = Promise.resolve(0);
  * The background's conversion, run when the worker starts and on install and update: `migrateStudyLogV2` unless
  * the marker says it has run, reading only the marker then. Calls run one at a time, so the worker starting and
  * `runtime.onInstalled` never convert together (two runs that both read storage before either writes would save
- * each line twice). Never rejects: a failure resolves 0, and the next call (or the options page) tries again.
+ * each line twice). Never rejects: a failure is logged as a warning and resolves 0, and the next call (or the
+ * options page) tries again.
  */
 export function migrateIfNeeded(): Promise<number> {
   conversion = conversion
     .then(async () => ((await browser.storage.local.get(MIGRATION_KEY))[MIGRATION_KEY] === true ? 0 : migrateStudyLogV2()))
-    .catch(() => 0);
+    .catch((err: unknown) => {
+      console.warn('LingoFlix: Study Log v2 conversion failed', err);
+      return 0;
+    });
   return conversion;
 }

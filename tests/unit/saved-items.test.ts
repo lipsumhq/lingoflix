@@ -290,10 +290,13 @@ describe('migrateStudyLogV2 (v2 spec §3.3)', () => {
       expect(await listItems()).toHaveLength(1);
     });
 
-    it('swallows errors, and the next call converts', async () => {
+    it('a failure resolves 0 with a console warning, and the next call converts', async () => {
       await fakeBrowser.storage.local.set({ 'log:old-1': preV2('old-1') });
-      vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(new Error('Storage is unavailable'));
+      const failure = new Error('Storage is unavailable');
+      vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(failure);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       expect(await migrateIfNeeded()).toBe(0);
+      expect(warn.mock.calls).toEqual([['LingoFlix: Study Log v2 conversion failed', failure]]);
       expect(await listItems()).toEqual([]);
       expect(await migrateIfNeeded()).toBe(1);
       expect(await listItems()).toHaveLength(1);
