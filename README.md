@@ -1,8 +1,21 @@
 # LingoFlix
 
 Understand every line on Netflix. LingoFlix is a free, open-source Chrome extension for
-studying languages with Netflix: remappable rewind/forward shortcuts, a one-key subtitle
-toggle, and (coming next) AI explanations of any subtitle line with your own Claude API key.
+studying languages with Netflix:
+
+- **Explain any line.** Hover a subtitle (or press E) and Claude explains what it means in this
+  scene, the key expressions, and how to use them, using the surrounding dialogue. Ask follow-up
+  questions right in the card.
+- **Study Log.** Every explanation is saved on your computer, organized by show, season, and episode.
+  Jump back to any line with one click.
+- **Line by line.** Jump to the previous or next line (A / D), replay the current one (R), or make
+  ← / → move by line instead of seconds.
+- **Your keys.** Rewind/forward by the seconds you choose, hide subtitles with one key, and remap
+  every shortcut.
+
+LingoFlix uses your own Claude API key (you pay Anthropic directly for what you use). The key and
+your Study Log stay on your computer; subtitle text is sent to Anthropic only when you ask for an
+explanation.
 
 Not affiliated with or endorsed by Netflix.
 
