@@ -77,7 +77,11 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
   port.onMessage.addListener((raw) => {
     if (received) return; // one request per Port
     received = true;
-    void run(raw);
+    // A failure outside the stream (e.g. storage) must still end the card's spinner.
+    run(raw).catch(() => {
+      clearTimeout(idleTimer);
+      fail('network');
+    });
   });
 
   async function run(raw: unknown): Promise<void> {

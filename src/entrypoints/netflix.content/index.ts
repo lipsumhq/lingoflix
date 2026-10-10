@@ -78,6 +78,7 @@ export default defineContentScript({
     const applySettings = (next: Settings) => {
       settings = next;
       controller.applySettings(next);
+      runtime.onSettingsChanged();
       if (!next.enabled) runtime.teardown();
     };
     void loadSettings().then(applySettings);

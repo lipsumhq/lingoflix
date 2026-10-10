@@ -24,6 +24,8 @@ export interface OverlayRuntime {
   onKeyDown(event: KeyboardEvent): boolean;
   /** Explain line shortcut: opens a card for the current line, or closes the open one. False when there is no line. */
   explainShortcut(): boolean;
+  /** Settings changed: if hover is now off (spec §5.2 hidden subtitles), a hover card closes at once. */
+  onSettingsChanged(): void;
   /** Spec §8.5: a new video closes the card without resuming the old one. */
   onVideoChange(): void;
   teardown(): void;
@@ -64,24 +66,41 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
     stopSwallowing = stop;
   };
 
+  /** Hover can explain lines: LingoFlix is on, subtitles are shown, and this is a watch page. */
+  const hoverAllowed = () => {
+    const s = deps.getSettings();
+    return !!s?.enabled && !s.subtitlesHidden && deps.isWatchPage();
+  };
+  const hoverEnabled = () => hoverAllowed() && deps.explain.openedBy() !== 'shortcut';
+
   const hover = createHoverTracker({
     onEnter: () => {
       if (deps.getSettings()?.pauseOnHover) deps.pause.pause();
     },
     onDwell: () => {
-      deps.explain.open('hover');
+      if (hoverEnabled()) deps.explain.open('hover');
+      else stopHover();
     },
     onLeave: () => deps.explain.close(),
   });
 
-  const hoverEnabled = () => {
-    const s = deps.getSettings();
-    return !!s?.enabled && !s.subtitlesHidden && deps.isWatchPage() && deps.explain.openedBy() !== 'shortcut';
+  /**
+   * Hover was turned off while in use (e.g. subtitles hidden): forget the hover and close its card, which
+   * also resumes playback if the hover paused it. A shortcut card stays open.
+   */
+  const stopHover = () => {
+    const hovering = hover.phase() !== 'idle';
+    hover.reset();
+    if (deps.explain.openedBy() === 'hover' || (hovering && !deps.explain.isOpen())) deps.explain.close();
+  };
+
+  const stopHoverIfOff = () => {
+    if (deps.explain.openedBy() !== 'shortcut' && !hoverAllowed()) stopHover();
   };
 
   const check = () => {
     queued = false;
-    if (!hoverEnabled()) return;
+    if (!hoverEnabled()) return stopHoverIfOff();
     const onLine = pointInRects(x, y, deps.subtitleRects());
     const card = deps.cardElement();
     const onCard = !!card && pointInRects(x, y, [card.getBoundingClientRect()], 0);
@@ -116,6 +135,7 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
     },
     onKeyDown(event) {
       if (event.code !== 'Escape' || !deps.explain.isOpen()) return false;
+      if (event.isComposing || event.keyCode === 229) return false; // the IME cancels its conversion
       event.preventDefault();
       event.stopImmediatePropagation(); // Netflix would also leave fullscreen
       closeByUser();
@@ -132,6 +152,7 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
       if (!opened) deps.explain.close(); // resumes if we just paused
       return opened;
     },
+    onSettingsChanged: stopHoverIfOff,
     onVideoChange() {
       hover.reset();
       waitForLeave = false;

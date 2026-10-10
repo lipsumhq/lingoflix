@@ -43,7 +43,7 @@ function setup(over: Partial<Settings> = {}, isInOverlay: (target: EventTarget |
   });
   cleanups.push(() => runtime.teardown());
   const move = (x: number, y: number) => runtime.onMouseMove({ clientX: x, clientY: y } as MouseEvent);
-  return { runtime, explain, pause, move, order };
+  return { runtime, explain, pause, move, order, settings };
 }
 
 const CLICK_EVENTS = ['pointerdown', 'mousedown', 'mouseup', 'click'] as const;
@@ -99,6 +99,30 @@ describe('overlay runtime', () => {
     }
   });
 
+  it('hiding subtitles closes an open hover card at once, but not a shortcut card', () => {
+    const { runtime, explain, move, settings } = setup();
+    move(200, 530);
+    vi.advanceTimersByTime(400);
+    expect(explain.open).toHaveBeenCalledWith('hover');
+    settings.subtitlesHidden = true;
+    runtime.onSettingsChanged();
+    expect(explain.close).toHaveBeenCalledTimes(1);
+
+    runtime.explainShortcut(); // Explain still works while subtitles are hidden (spec 5.2)
+    expect(explain.open).toHaveBeenLastCalledWith('shortcut');
+    runtime.onSettingsChanged();
+    expect(explain.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('a dwell that ends after subtitles were hidden does not open a card', () => {
+    const { explain, move, settings } = setup();
+    move(200, 530);
+    vi.advanceTimersByTime(200);
+    settings.subtitlesHidden = true;
+    vi.advanceTimersByTime(800);
+    expect(explain.open).not.toHaveBeenCalled();
+  });
+
   it('the Explain shortcut opens for the current line; pressing it again closes', () => {
     const { runtime, explain, pause } = setup();
     expect(runtime.explainShortcut()).toBe(true);
@@ -117,6 +141,19 @@ describe('overlay runtime', () => {
     expect(runtime.onKeyDown(esc)).toBe(true);
     expect(esc.defaultPrevented).toBe(true);
     expect(explain.close).toHaveBeenCalled();
+  });
+
+  it('Escape during IME composition cancels the conversion, not the card', () => {
+    const { runtime, explain } = setup();
+    runtime.explainShortcut();
+    const composing = new KeyboardEvent('keydown', { code: 'Escape', isComposing: true, cancelable: true });
+    expect(runtime.onKeyDown(composing)).toBe(false);
+    expect(composing.defaultPrevented).toBe(false);
+    const imeKey = new KeyboardEvent('keydown', { code: 'Escape', cancelable: true });
+    Object.defineProperty(imeKey, 'keyCode', { value: 229 });
+    expect(runtime.onKeyDown(imeKey)).toBe(false);
+    expect(imeKey.defaultPrevented).toBe(false);
+    expect(explain.close).not.toHaveBeenCalled();
   });
 
   it('a click outside closes a shortcut card; a click inside does not', () => {

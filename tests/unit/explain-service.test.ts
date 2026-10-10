@@ -112,6 +112,20 @@ describe('explain service', () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
+  it("a background failure before the request (storage gone) shows Couldn't reach Claude", async () => {
+    const { port, sent, send } = fakePort();
+    serveExplainPort(
+      port,
+      deps(fakeClient().client, {
+        getApiKey: async () => {
+          throw new Error('storage gone');
+        },
+      }),
+    );
+    send({ type: 'start', request: REQUEST });
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach Claude" }]));
+  });
+
   it('disconnect aborts the request and saves nothing', async () => {
     const { client, signals } = fakeClient({ hang: true });
     const { port, sent, send, disconnect } = fakePort();

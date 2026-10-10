@@ -14,7 +14,9 @@ export function toExplainError(err: unknown): { code: ExplainErrorCode; message:
   if (err instanceof RateLimitError) return failure('busy');
   if (err instanceof APIConnectionError) return failure('network'); // includes timeouts
   if (err instanceof APIError) {
-    if (err.status === 529 || err.type === 'overloaded_error') return failure('busy');
+    // 5xx (including a gateway's HTML page) and mid-stream rate limit or overload errors, which have no status.
+    if (err.status !== undefined && err.status >= 500) return failure('busy');
+    if (err.type === 'overloaded_error' || err.type === 'rate_limit_error') return failure('busy');
     return { code: 'api', message: anthropicMessage(err) };
   }
   return { code: 'api', message: err instanceof Error ? err.message : String(err) };

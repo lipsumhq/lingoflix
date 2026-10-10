@@ -26,7 +26,9 @@ export function createSdkClient(apiKey: string): ClaudeClient {
     async streamText(params, onText, signal) {
       const stream = client.messages.stream(
         { model: params.model, max_tokens: params.maxTokens, system: params.system, messages: params.messages },
-        { signal },
+        // No SDK retries: a retried 429/529 (which may wait out a long retry-after) would outlast the 30 s idle
+        // timer and show "Couldn't reach Claude" instead of "Claude is busy right now" (spec §7.4).
+        { signal, maxRetries: 0 },
       );
       stream.on('text', (delta) => onText(delta));
       const message = await stream.finalMessage();

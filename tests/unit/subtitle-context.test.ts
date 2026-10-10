@@ -130,6 +130,19 @@ describe('describeLine', () => {
     });
   });
 
+  it('after rewinding, the context is the lines before it in the episode', () => {
+    const h = createLineHistory();
+    for (let i = 1; i <= 8; i++) {
+      h.observe(`L${i}`, 1000 * i);
+      h.observe('', 1000 * i + 500);
+    }
+    h.observe('L6', 6000 + 50); // rewound: L6 and L7 are seen again
+    h.observe('L7', 7000 + 50);
+    const line = h.current()!;
+    expect(line).toMatchObject({ text: 'L7', shownAtMs: 7050 });
+    expect(describeLine(line, null, h).context.before).toEqual(['L1', 'L2', 'L3', 'L4', 'L5', 'L6']);
+  });
+
   it('a line whose time is unknown has no timing', () => {
     const h = observeAll([['Hello', null as unknown as number]]);
     expect(describeLine(h.current()!, null, h).timing).toBeNull();

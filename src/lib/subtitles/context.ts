@@ -6,6 +6,8 @@ export const CONTEXT_LINES = 6;
 export const OBSERVED_START_LEAD_MS = 300;
 /** Slack when matching an observed time to a cue's time range. */
 export const CUE_MATCH_TOLERANCE_MS = 1500;
+/** The same line seen twice this close together (e.g. after rewinding) is one line. */
+const REWATCHED_WITHIN_MS = 500;
 
 export interface DialogueContext {
   before: string[];
@@ -69,8 +71,36 @@ export function trackMatchesLine(cues: readonly Cue[], line: ObservedLine): bool
   return line.shownAtMs !== null && findCue(cues, line.normalized, line.shownAtMs) >= 0;
 }
 
+/**
+ * Up to CONTEXT_LINES lines seen before `line` in episode order, not in the order they were seen: after
+ * rewinding or Replay, lines seen again are new history entries. Repeats of the target line and rewatched
+ * duplicates (same text within 500 ms) are left out.
+ */
+function historyBefore(line: ObservedLine, history: Pick<LineHistory, 'before' | 'all'>): string[] {
+  const at = line.shownAtMs;
+  if (at === null) return history.before(line, CONTEXT_LINES).map((l) => l.text);
+  const earlier = history
+    .all()
+    .filter((l): l is ObservedLine & { shownAtMs: number } => l.shownAtMs !== null && l.shownAtMs < at)
+    .filter((l) => l.normalized !== line.normalized)
+    .sort((a, b) => a.shownAtMs - b.shownAtMs);
+  const lastSeen = new Map<string, number>();
+  const merged: ObservedLine[] = [];
+  for (const l of earlier) {
+    const previous = lastSeen.get(l.normalized);
+    if (previous !== undefined && l.shownAtMs - previous <= REWATCHED_WITHIN_MS) continue;
+    lastSeen.set(l.normalized, l.shownAtMs);
+    merged.push(l);
+  }
+  return merged.slice(-CONTEXT_LINES).map((l) => l.text);
+}
+
 /** Context and timing for a line: from the subtitle file when it matches, else from the rolling history. */
-export function describeLine(line: ObservedLine, cues: readonly Cue[] | null, history: Pick<LineHistory, 'before'>): LineDetails {
+export function describeLine(
+  line: ObservedLine,
+  cues: readonly Cue[] | null,
+  history: Pick<LineHistory, 'before' | 'all'>,
+): LineDetails {
   const at = line.shownAtMs;
   const first = cues && at !== null ? findCue(cues, line.normalized, at) : -1;
   if (cues && first >= 0) {
@@ -92,7 +122,7 @@ export function describeLine(line: ObservedLine, cues: readonly Cue[] | null, hi
     };
   }
   return {
-    context: { before: history.before(line, CONTEXT_LINES).map((l) => l.text), after: [] },
+    context: { before: historyBefore(line, history), after: [] },
     timing: at === null ? null : { startMs: Math.max(0, at - OBSERVED_START_LEAD_MS), endMs: line.hiddenAtMs },
     fromTrack: false,
   };

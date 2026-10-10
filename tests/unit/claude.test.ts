@@ -104,6 +104,19 @@ describe('toExplainError', () => {
     expect(toExplainError(new APIConnectionTimeoutError()).code).toBe('network');
   });
 
+  it('server errors and mid-stream rate limit or overload errors are busy, never raw HTML', () => {
+    expect(toExplainError(APIError.generate(500, { error: { type: 'api_error', message: 'x' } }, 'x', headers))).toEqual({
+      code: 'busy',
+      message: 'Claude is busy right now',
+    });
+    const badGateway = toExplainError(APIError.generate(502, '<html>bad gateway</html>' as never, '502 <html>', headers));
+    expect(badGateway).toEqual({ code: 'busy', message: 'Claude is busy right now' });
+    for (const type of ['rate_limit_error', 'overloaded_error'] as const) {
+      const midStream = new APIError(undefined, { type: 'error', error: { type, message: 'slow' } }, undefined, undefined, type);
+      expect(toExplainError(midStream).code).toBe('busy');
+    }
+  });
+
   it("shows Anthropic's own message for other API errors", () => {
     const credit = APIError.generate(
       400,

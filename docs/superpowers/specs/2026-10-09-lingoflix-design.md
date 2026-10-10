@@ -270,7 +270,7 @@ Same system prompt with an added instruction to answer the learner's question di
 |---|---|
 | No key stored | "Add your Claude API key" + **Open Settings** (no request made) |
 | 401 | "Your API key was rejected" + **Open Settings** |
-| 429 / 529 | "Claude is busy right now" + **Retry** |
+| 429, 529, or another 5xx; a rate limit or overload error mid-stream (no SDK retries) | "Claude is busy right now" + **Retry** |
 | Network failure / timeout (30 s without a stream event) | "Couldn't reach Claude" + **Retry** |
 | Other API error | Anthropic's error message verbatim (e.g. insufficient credit) |
 
