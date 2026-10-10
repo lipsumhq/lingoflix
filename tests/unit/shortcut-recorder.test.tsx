@@ -22,6 +22,11 @@ describe('ShortcutRecorder', () => {
     expect(screen.getByRole('button', { name: 'Change Rewind shortcut' }).textContent).toBe('←');
   });
 
+  it('asks for a key while recording', () => {
+    const { startRecording } = setup();
+    expect(startRecording().textContent).toBe('Press any key…');
+  });
+
   it('records the next key press', () => {
     const { onChange, startRecording } = setup();
     fireEvent.keyDown(startRecording(), { code: 'KeyJ', key: 'j' });
@@ -62,9 +67,9 @@ describe('ShortcutRecorder', () => {
     expect(screen.getByText("Overrides Netflix's F shortcut.")).toBeTruthy();
   });
 
-  it('shows "Not set" and no Clear button when unbound', () => {
+  it('invites "Pick a key" and has no Clear button when unbound', () => {
     setup({ ...DEFAULT_SHORTCUTS, rewind: null });
-    expect(screen.getByRole('button', { name: 'Change Rewind shortcut' }).textContent).toBe('Not set');
+    expect(screen.getByRole('button', { name: 'Change Rewind shortcut' }).textContent).toBe('Pick a key');
     expect(screen.queryByRole('button', { name: 'Clear Rewind shortcut' })).toBeNull();
   });
 });

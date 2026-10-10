@@ -48,7 +48,7 @@ All shortcuts are remappable in Settings. A binding is `{ code, ctrl, alt, shift
 |---|---|---|
 | Rewind | `ArrowLeft`, 5 s | Seek back N seconds (N configurable, 1–60) |
 | Forward | `ArrowRight`, 5 s | Seek forward N seconds (N configurable, 1–60) |
-| Toggle subtitles | `KeyC` | Hide/show Netflix subtitles (§5.2) |
+| Show / hide subtitles | `KeyC` | Hide/show Netflix subtitles (§5.2) |
 | Replay line | `KeyR` | Seek to the start of the current line and play |
 | Explain line | `KeyE` | Open the explanation card for the current line (§5.3) |
 | Shadow line | `KeyV` | Start/stop voice recording for the current line (§5.6) |
@@ -145,22 +145,23 @@ Mechanics:
 
 ### 5.7 Popup
 
-- **Enabled** toggle (master switch).
+- **Enabled** toggle (master switch) in a status card: "You're all set!" / "Your shortcuts are live on Netflix." when on, "Taking a break" / "Netflix works like normal until you turn this back on." when off. The switch's accessible name stays "Enabled".
 - **Pause on hover** toggle.
 - API key status: "✓ Claude key set" or "⚠ Add your Claude API key" (links to Settings).
-- Links: **Settings**, **Study Log**.
-- Donation buttons (§5.9).
+- Links: **Settings** (the yellow primary button), **Study Log**.
+- Donation card, compact (§5.9).
 
 ### 5.8 Options page
 
-Two tabs plus one hidden route; donation footer on both tabs.
+Two tabs plus one hidden route. Layout (§5.10): a top bar with the logo and pill tabs; a main column; a right rail with a "Try this" study tip (one of a few, picked on each open; tips name actions, not keys) and the donation card. Below 1024 px wide the rail moves under the main column. "Not affiliated with or endorsed by Netflix." sits under the main column.
 
 **Settings tab:**
+- **Enabled** toggle and **Appearance** — Light / Dark / System (default System) — in a General card.
 - **Claude API key** — password field, show/hide, **Save**, **Test key** (calls the free `GET /v1/models` endpoint; reports valid / rejected / network error), **Remove**. Copy explains where to get a key and that usage is billed by Anthropic.
 - **Explanation language** — curated list of ~30 languages shown by native name; default from `chrome.i18n.getUILanguage()`.
 - **Card sections** — four toggles (Meaning, Key expressions, How to use it, Follow-up box).
 - **Pause on hover** toggle.
-- **Shortcuts** — one row per action: current binding, **Change** (click then press a key combo), **Clear**; seconds inputs for Rewind/Forward; **Reset to defaults**.
+- **Shortcuts** — one row per action: an icon tile, the binding as a keycap (click it, then press a key combo; "Pick a key" when unbound), **Clear** (✕); `– N s +` steppers for Rewind/Forward (the number can also be typed, 1–60); **Reset** (to defaults).
 
 **Study Log tab:** §5.5.
 
@@ -169,8 +170,21 @@ Two tabs plus one hidden route; donation footer on both tabs.
 ### 5.9 Donations
 
 - Two buttons: **Buy Me a Coffee** → `https://buymeacoffee.com/jaycho1214`, **GitHub Sponsors** → `https://github.com/sponsors/jaycho1214`.
-- Shown in the popup and in the options page footer. Short copy: "LingoFlix is free. If it helps you learn, you can support it."
-- URLs live in one config constant (`src/lib/config.ts`).
+- A card titled "Enjoying LingoFlix?" with the copy "It's free forever. A coffee keeps it going." Shown in the popup (compact: buttons read **Coffee** / **Sponsor**, full names kept as their accessible names) and in the options page right rail.
+- URLs and copy live in one config module (`src/lib/config.ts`).
+
+### 5.10 Look and feel
+
+Benchmarked on Duolingo's qualities — friendly, chunky, bright, encouraging — without its brand assets (no owl, no Duolingo green, no Feather font) and without Netflix red.
+
+- **Color:** Popcorn yellow `#FFC800` primary with a darker edge (`#E0A800` light / `#B88A00` dark) and dark text on yellow (`#3A2E00`). Tokens live in `src/assets/tailwind.css` as `light-dark()` pairs.
+- **Appearance:** Light / Dark / System setting (`theme` in Settings, default `system`). System follows the OS live; Light/Dark pin it via `<html data-theme>`. Applies to the popup and options page. On-Netflix UI (notices, Plan 2's explanation card) always uses the dark tokens.
+- **Type:** Nunito (variable), bundled with the extension via `@fontsource-variable/nunito` — no font requests to Google. Headings 900, labels 800.
+- **Shapes:** 2 px borders, 16–18 px corner radius, cards instead of dividers.
+- **Buttons:** primary = yellow with a 4 px bottom edge that disappears when pressed; secondary = card-colored with a 2 px border and 3 px edge. Uppercase, letter-spaced labels. Keycaps and the stepper's –/+ use a thick bottom border. Edges on controls inside a tight container (segmented control, switch) are drawn inset so the control stays centered.
+- **Icons:** Lucide (`lucide-react`), stroke 2.5–3; no emoji in the UI.
+- **Logo:** a yellow speech bubble with a dark play button (subtitles + video). `src/assets/icon.svg` is the source for the toolbar icons (`@wxt-dev/auto-icons`).
+- **Copy:** short and encouraging ("You're all set!", "Pick a key", "Press any key…", "Test your ears, then peek.").
 
 ## 6. Architecture
 
@@ -204,7 +218,7 @@ Pure logic lives in `src/lib/` with no Chrome or DOM dependencies where possible
 
 | Data | Area | Notes |
 |---|---|---|
-| Settings (enabled, pauseOnHover, explanationLanguage, cardSections, shortcuts, seek seconds, subtitlesHidden) | `chrome.storage.sync` | small; follows the user's Chrome profile |
+| Settings (enabled, theme, pauseOnHover, explanationLanguage, cardSections, shortcuts, seek seconds, subtitlesHidden) | `chrome.storage.sync` | small; follows the user's Chrome profile |
 | API key | `chrome.storage.local` (`apiKey`) | never synced; read only by background |
 | Study Log entries | `chrome.storage.local` (`log:{id}`) | `unlimitedStorage` |
 

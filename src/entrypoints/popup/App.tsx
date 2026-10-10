@@ -1,39 +1,49 @@
 import { browser } from '#imports';
-import { DonationLinks } from '@/components/DonationLinks';
+import { Settings as SettingsIcon } from 'lucide-react';
+import { DonationCard } from '@/components/DonationCard';
+import { Logo } from '@/components/Logo';
 import { Toggle } from '@/components/Toggle';
+import { buttonPrimary, card } from '@/components/styles';
 import { useSettings } from '@/hooks/useSettings';
+import { useTheme } from '@/hooks/useTheme';
 
 export function App() {
   const { settings, update } = useSettings();
+  useTheme(settings?.theme);
 
   return (
-    <main className="w-80 space-y-4 bg-neutral-950 p-4 text-neutral-100">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-base font-semibold">LingoFlix</h1>
-        <span className="text-xs text-neutral-500">v{browser.runtime.getManifest().version}</span>
+    <main className="flex w-80 flex-col gap-3.5 p-4">
+      <header className="flex items-center gap-2">
+        <Logo />
+        <span className="ml-auto rounded-full border-2 border-line px-2 text-[11px] font-extrabold text-mute">
+          v{browser.runtime.getManifest().version}
+        </span>
       </header>
 
-      {settings ? (
-        <Toggle
-          label="Enabled"
-          description="Turn LingoFlix on or off on Netflix"
-          checked={settings.enabled}
-          onChange={(enabled) => void update((s) => ({ ...s, enabled }))}
-        />
-      ) : (
-        <p className="text-sm text-neutral-400">Loading…</p>
-      )}
+      <section className={`${card} p-3.5`}>
+        {settings ? (
+          <Toggle
+            name="Enabled"
+            label={settings.enabled ? "You're all set!" : 'Taking a break'}
+            description={
+              settings.enabled
+                ? 'Your shortcuts are live on Netflix.'
+                : 'Netflix works like normal until you turn this back on.'
+            }
+            checked={settings.enabled}
+            onChange={(enabled) => void update((s) => ({ ...s, enabled }))}
+          />
+        ) : (
+          <p className="text-sm font-semibold text-mute">Loading…</p>
+        )}
+      </section>
 
-      <button
-        type="button"
-        onClick={() => void browser.runtime.openOptionsPage()}
-        className="w-full rounded-md bg-yellow-400 px-3 py-2 text-sm font-semibold text-neutral-950 hover:bg-yellow-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-400"
-      >
+      <button type="button" onClick={() => void browser.runtime.openOptionsPage()} className={`${buttonPrimary} w-full`}>
+        <SettingsIcon size={18} strokeWidth={2.75} aria-hidden />
         Settings
       </button>
 
-      <hr className="border-neutral-800" />
-      <DonationLinks />
+      <DonationCard compact />
     </main>
   );
 }

@@ -1,4 +1,6 @@
+import { X } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { focusRing, keycap } from '@/components/styles';
 import {
   ACTION_LABELS,
   bindingFromEvent,
@@ -17,9 +19,6 @@ interface ShortcutRecorderProps {
 }
 
 const platform: 'mac' | 'other' = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac') ? 'mac' : 'other';
-
-const chip =
-  'min-w-16 rounded-md border px-3 py-1.5 text-center font-mono text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-400';
 
 export function ShortcutRecorder({ action, shortcuts, onChange }: ShortcutRecorderProps) {
   const label = ACTION_LABELS[action];
@@ -60,8 +59,8 @@ export function ShortcutRecorder({ action, shortcuts, onChange }: ShortcutRecord
   };
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col items-end gap-1.5">
+      <div className="flex items-center gap-1.5">
         {recording ? (
           <div
             ref={recorderRef}
@@ -70,9 +69,9 @@ export function ShortcutRecorder({ action, shortcuts, onChange }: ShortcutRecord
             aria-label={`Press a new key for ${label}`}
             onKeyDown={onKeyDown}
             onBlur={() => setRecording(false)}
-            className={`${chip} border-yellow-400 text-yellow-300`}
+            className={`${keycap} min-w-40 border-brand bg-tint text-[13px] font-extrabold text-tint-ink hover:bg-tint`}
           >
-            Press a key…
+            Press any key…
           </div>
         ) : (
           <button
@@ -83,9 +82,9 @@ export function ShortcutRecorder({ action, shortcuts, onChange }: ShortcutRecord
               setError(null);
               setRecording(true);
             }}
-            className={`${chip} border-neutral-700 bg-neutral-900 text-neutral-100 hover:border-neutral-500`}
+            className={`${keycap} ${binding ? '' : 'text-[13px] font-extrabold text-mute'}`}
           >
-            {formatBinding(binding, platform)}
+            {binding ? formatBinding(binding, platform) : 'Pick a key'}
           </button>
         )}
         {binding && !recording && (
@@ -96,20 +95,21 @@ export function ShortcutRecorder({ action, shortcuts, onChange }: ShortcutRecord
               setError(null);
               onChange(null);
             }}
-            className="rounded-md px-2 py-1.5 text-xs text-neutral-400 hover:text-neutral-100 focus-visible:outline-2 focus-visible:outline-yellow-400"
+            title="Clear"
+            className={`grid size-8 place-items-center rounded-lg text-mute hover:bg-soft hover:text-ink ${focusRing}`}
           >
-            Clear
+            <X size={16} strokeWidth={3} aria-hidden />
           </button>
         )}
       </div>
       {error ? (
-        <p role="alert" className="text-xs text-red-400">
+        <p role="alert" className="text-xs font-bold text-danger">
           {error}
         </p>
       ) : (
         binding &&
         overridesNetflix(binding) && (
-          <p className="text-xs text-yellow-300">Overrides Netflix's {formatBinding(binding, platform)} shortcut.</p>
+          <p className="text-xs font-bold text-tint-ink">Overrides Netflix's {formatBinding(binding, platform)} shortcut.</p>
         )
       )}
     </div>

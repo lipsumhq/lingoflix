@@ -1,8 +1,14 @@
+import { Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { DonationLinks } from '@/components/DonationLinks';
+import { DonationCard } from '@/components/DonationCard';
+import { Logo } from '@/components/Logo';
+import { TipCard } from '@/components/TipCard';
+import { focusRing } from '@/components/styles';
+import { useSettings } from '@/hooks/useSettings';
+import { useTheme } from '@/hooks/useTheme';
 import { SettingsTab } from './SettingsTab';
 
-const TABS = [{ id: 'settings', label: 'Settings' }] as const;
+const TABS = [{ id: 'settings', label: 'Settings', icon: SettingsIcon }] as const;
 type TabId = (typeof TABS)[number]['id'];
 
 function tabFromHash(): TabId {
@@ -12,6 +18,8 @@ function tabFromHash(): TabId {
 
 export function App() {
   const [tab, setTab] = useState<TabId>(tabFromHash);
+  const { settings } = useSettings();
+  useTheme(settings?.theme);
 
   useEffect(() => {
     const onHashChange = () => setTab(tabFromHash());
@@ -20,36 +28,41 @@ export function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <div className="mx-auto max-w-3xl px-6 py-10">
-        <header className="mb-8">
-          <h1 className="text-2xl font-semibold">LingoFlix</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Understand every line on Netflix. Not affiliated with or endorsed by Netflix.
-          </p>
-          <nav aria-label="Sections" className="mt-6 flex gap-1 border-b border-neutral-800">
-            {TABS.map((t) => (
-              <a
-                key={t.id}
-                href={`#/${t.id}`}
-                aria-current={tab === t.id ? 'page' : undefined}
-                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-yellow-400 ${
-                  tab === t.id
-                    ? 'border-yellow-400 text-neutral-100'
-                    : 'border-transparent text-neutral-400 hover:text-neutral-100'
-                }`}
-              >
-                {t.label}
-              </a>
-            ))}
+    <div className="min-h-screen">
+      <header className="border-b-2 border-soft">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
+          <Logo large />
+          <nav aria-label="Sections" className="flex gap-1.5">
+            {TABS.map((t) => {
+              const current = tab === t.id;
+              const Icon = t.icon;
+              return (
+                <a
+                  key={t.id}
+                  href={`#/${t.id}`}
+                  aria-current={current ? 'page' : undefined}
+                  className={`inline-flex items-center gap-2 rounded-full border-2 px-4 py-2 text-sm font-extrabold tracking-wide uppercase ${focusRing} ${
+                    current ? 'border-tint-line bg-tint text-tint-ink' : 'border-transparent text-mute hover:text-ink'
+                  }`}
+                >
+                  <Icon size={16} strokeWidth={2.5} aria-hidden />
+                  {t.label}
+                </a>
+              );
+            })}
           </nav>
-        </header>
+        </div>
+      </header>
 
-        <main>{tab === 'settings' && <SettingsTab />}</main>
-
-        <footer className="mt-16 border-t border-neutral-800 pt-6">
-          <DonationLinks />
-        </footer>
+      <div className="mx-auto grid max-w-5xl gap-6 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <main className="flex flex-col gap-5">
+          {tab === 'settings' && <SettingsTab />}
+          <p className="text-xs font-semibold text-mute">Not affiliated with or endorsed by Netflix.</p>
+        </main>
+        <aside aria-label="Tips and support" className="flex flex-col gap-4 lg:pt-[74px]">
+          <TipCard />
+          <DonationCard />
+        </aside>
       </div>
     </div>
   );

@@ -53,6 +53,16 @@ describe('normalizeSettings', () => {
     expect(s.shortcuts.toggleSubtitles).toBeNull(); // explicitly unbound stays unbound
   });
 
+  it('keeps a valid appearance and falls back to following the system', () => {
+    expect(DEFAULT_SETTINGS.theme).toBe('system');
+    for (const theme of ['light', 'dark', 'system'] as const) {
+      expect(normalizeSettings({ theme }).theme).toBe(theme);
+    }
+    for (const theme of ['Dark', 'sepia', 1, null]) {
+      expect(normalizeSettings({ theme }).theme).toBe('system');
+    }
+  });
+
   it('leaves a missing action unbound when its default is already taken', () => {
     const s = normalizeSettings({ shortcuts: { rewind: key('KeyC'), forward: key('ArrowRight') } });
     expect(s.shortcuts.rewind).toEqual(key('KeyC'));

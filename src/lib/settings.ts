@@ -1,8 +1,13 @@
 import { storage } from '#imports';
 import { ACTION_IDS, DEFAULT_SHORTCUTS, sameBinding, type ActionId, type Binding, type ShortcutMap } from './shortcuts';
 
+/** Popup and options page colors. `system` follows the OS light/dark setting. */
+export type ThemePreference = 'light' | 'dark' | 'system';
+export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system'];
+
 export interface Settings {
   enabled: boolean;
+  theme: ThemePreference;
   shortcuts: ShortcutMap;
   rewindSeconds: number;
   forwardSeconds: number;
@@ -14,6 +19,7 @@ export const SEEK_SECONDS_MAX = 60;
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
+  theme: 'system',
   shortcuts: DEFAULT_SHORTCUTS,
   rewindSeconds: 5,
   forwardSeconds: 5,
@@ -71,6 +77,7 @@ export function normalizeSettings(raw: unknown): Settings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   return {
     enabled: typeof r.enabled === 'boolean' ? r.enabled : DEFAULT_SETTINGS.enabled,
+    theme: THEME_PREFERENCES.includes(r.theme as ThemePreference) ? (r.theme as ThemePreference) : DEFAULT_SETTINGS.theme,
     shortcuts: normalizeShortcuts(r.shortcuts),
     rewindSeconds: clampSeekSeconds(r.rewindSeconds, DEFAULT_SETTINGS.rewindSeconds),
     forwardSeconds: clampSeekSeconds(r.forwardSeconds, DEFAULT_SETTINGS.forwardSeconds),

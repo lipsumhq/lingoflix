@@ -15,7 +15,7 @@ export const ACTION_IDS: readonly ActionId[] = ['rewind', 'forward', 'toggleSubt
 export const ACTION_LABELS: Record<ActionId, string> = {
   rewind: 'Rewind',
   forward: 'Forward',
-  toggleSubtitles: 'Toggle subtitles',
+  toggleSubtitles: 'Show / hide subtitles',
 };
 
 export function key(code: string, mods: Partial<Omit<Binding, 'code'>> = {}): Binding {

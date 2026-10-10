@@ -1,40 +1,48 @@
 import { useId } from 'react';
+import { focusRing } from './styles';
 
 interface ToggleProps {
   label: string;
+  /** Accessible name when the visible label changes with the state (e.g. "You're all set!" / "Taking a break"). */
+  name?: string;
   description?: string;
   checked: boolean;
   onChange(next: boolean): void;
 }
 
-export function Toggle({ label, description, checked, onChange }: ToggleProps) {
+export function Toggle({ label, name, description, checked, onChange }: ToggleProps) {
   const id = useId();
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-labelledby={`${id}-label`}
+      aria-label={name}
+      aria-labelledby={name ? undefined : `${id}-label`}
       aria-describedby={description ? `${id}-desc` : undefined}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-start justify-between gap-4 rounded-md py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-yellow-400"
+      className={`flex w-full items-center justify-between gap-4 rounded-2xl text-left ${focusRing}`}
     >
-      <span>
-        <span id={`${id}-label`} className="block text-sm font-medium text-neutral-100">
+      <span className="min-w-0">
+        <span id={`${id}-label`} className="block text-base font-extrabold text-ink">
           {label}
         </span>
         {description && (
-          <span id={`${id}-desc`} className="block text-xs text-neutral-400">
+          <span id={`${id}-desc`} className="mt-0.5 block text-[13px] leading-snug font-semibold text-mute">
             {description}
           </span>
         )}
       </span>
       <span
         aria-hidden="true"
-        className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? 'bg-yellow-400' : 'bg-neutral-600'}`}
+        className={`relative h-8 w-[52px] shrink-0 rounded-full transition-colors ${
+          checked ? 'bg-brand shadow-[inset_0_-3px_0_var(--lf-brand-edge)]' : 'bg-line shadow-[inset_0_-3px_0_rgb(0_0_0/0.12)]'
+        }`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full shadow transition-transform ${checked ? 'translate-x-4 bg-neutral-950' : 'bg-white'}`}
+          className={`absolute top-1 left-1 size-6 rounded-full bg-white shadow-[0_2px_0_rgb(0_0_0/0.15)] transition-transform ${
+            checked ? 'translate-x-5' : ''
+          }`}
         />
       </span>
     </button>
