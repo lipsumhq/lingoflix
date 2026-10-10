@@ -94,6 +94,16 @@ describe('storage', () => {
     expect(await loadSettings()).toEqual(next);
   });
 
+  it('updateSettings calls started together all land (no lost update)', async () => {
+    await Promise.all([
+      updateSettings((s) => ({ ...s, pauseOnHover: false })),
+      updateSettings((s) => ({ ...s, cardSections: { ...s.cardSections, keyExpressions: false } })),
+    ]);
+    const s = await loadSettings();
+    expect(s.pauseOnHover).toBe(false);
+    expect(s.cardSections.keyExpressions).toBe(false);
+  });
+
   it('watchSettings reports normalized changes', async () => {
     const seen: Settings[] = [];
     const unwatch = watchSettings((s) => seen.push(s));

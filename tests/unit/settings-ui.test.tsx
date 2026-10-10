@@ -1,0 +1,108 @@
+// @vitest-environment happy-dom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { ApiKeyCard } from '@/entrypoints/options/ApiKeyCard';
+import { SettingsTab } from '@/entrypoints/options/SettingsTab';
+import type { sendToBackground } from '@/lib/messages';
+import { loadSettings } from '@/lib/settings';
+
+beforeEach(() => fakeBrowser.reset());
+afterEach(cleanup);
+
+/** Stands in for the background worker's API key handling. */
+function fakeBackground(initialKey: string | null = null) {
+  let key = initialKey;
+  const send = vi.fn(async (m: { type: string; key?: string }) => {
+    switch (m.type) {
+      case 'api-key:status':
+        return { set: key !== null, masked: key ? `sk-ant-…${key.slice(-4)}` : null };
+      case 'api-key:set': {
+        const next = m.key?.trim() ?? '';
+        if (!next || /\s/.test(next)) return { ok: false };
+        key = next;
+        return { ok: true };
+      }
+      case 'api-key:remove':
+        key = null;
+        return { ok: true };
+      case 'api-key:test':
+        return (m.key ?? key ?? '').includes('good')
+          ? { result: 'valid', message: 'Your key works.' }
+          : { result: 'rejected', message: 'Anthropic rejected this key.' };
+      default:
+        throw new Error(`unexpected ${m.type}`);
+    }
+  });
+  return { send: send as unknown as typeof sendToBackground, calls: send.mock.calls };
+}
+
+describe('Claude API key card', () => {
+  it('explains where to get a key and saves one without ever showing it again', async () => {
+    const { send } = fakeBackground();
+    render(<ApiKeyCard send={send} />);
+    expect(await screen.findByText('No key saved yet.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'console.anthropic.com' }).getAttribute('href')).toBe('https://console.anthropic.com/settings/keys');
+    expect(screen.getByText(/billed to your Anthropic account/)).toBeTruthy();
+    const input = screen.getByLabelText('Claude API key') as HTMLInputElement;
+    expect(input.type).toBe('password');
+    fireEvent.click(screen.getByRole('button', { name: 'Show key' }));
+    expect(input.type).toBe('text');
+    fireEvent.change(input, { target: { value: 'sk-ant-good-1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Key saved.')).toBeTruthy();
+    expect(await screen.findByText('sk-ant-…1234')).toBeTruthy();
+    expect(input.value).toBe('');
+  });
+
+  it('tests the saved key and reports the result', async () => {
+    const { send } = fakeBackground('sk-ant-bad-0000');
+    render(<ApiKeyCard send={send} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Test key' }));
+    expect(await screen.findByText('Anthropic rejected this key.')).toBeTruthy();
+  });
+
+  it('removes the key and refuses junk', async () => {
+    const { send } = fakeBackground('sk-ant-good-9999');
+    render(<ApiKeyCard send={send} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    expect(await screen.findByText('No key saved yet.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Claude API key'), { target: { value: 'two words' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText("That doesn't look like an API key.")).toBeTruthy();
+  });
+
+  it('says so when the key status cannot be read', async () => {
+    const send = vi.fn(async () => {
+      throw new Error('no background');
+    }) as unknown as typeof sendToBackground;
+    render(<ApiKeyCard send={send} />);
+    expect(await screen.findByText("Couldn't check the saved key.")).toBeTruthy();
+  });
+});
+
+describe('explanation and line settings', () => {
+  it('saves the explanation language, card sections, and Pause on hover', async () => {
+    render(<SettingsTab send={fakeBackground().send} />);
+    fireEvent.change(await screen.findByLabelText('Explain in'), { target: { value: 'ja' } });
+    await waitFor(async () => expect((await loadSettings()).explanationLanguage).toBe('ja'));
+    expect(screen.getByRole('option', { name: '日本語' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('switch', { name: 'Key expressions' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Pause on hover' }));
+    await waitFor(async () => {
+      const s = await loadSettings();
+      expect(s.cardSections.keyExpressions).toBe(false);
+      expect(s.pauseOnHover).toBe(false);
+    });
+  });
+
+  it('Rewind can jump by one line; the seconds stepper hides in that mode', async () => {
+    render(<SettingsTab send={fakeBackground().send} />);
+    const group = await screen.findByRole('radiogroup', { name: 'Rewind jumps by' });
+    expect(screen.getByLabelText('Rewind seconds')).toBeTruthy();
+    fireEvent.click(group.querySelector('[role="radio"]:last-child')!);
+    await waitFor(async () => expect((await loadSettings()).rewindMode).toBe('line'));
+    await waitFor(() => expect(screen.queryByLabelText('Rewind seconds')).toBeNull());
+    expect(screen.getByLabelText('Forward seconds')).toBeTruthy();
+  });
+});

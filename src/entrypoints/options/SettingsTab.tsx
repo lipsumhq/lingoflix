@@ -1,4 +1,5 @@
 import {
+  AlignLeft,
   Captions,
   FastForward,
   MessageSquareText,
@@ -10,6 +11,7 @@ import {
   SkipBack,
   SkipForward,
   Sun,
+  Timer,
   type LucideIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -17,8 +19,11 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Toggle } from '@/components/Toggle';
 import { buttonSecondary, card, iconTile } from '@/components/styles';
 import { useSettings } from '@/hooks/useSettings';
-import { DEFAULT_SETTINGS, type Settings, type ThemePreference } from '@/lib/settings';
+import { DEFAULT_SETTINGS, type SeekMode, type Settings, type ThemePreference } from '@/lib/settings';
 import { ACTION_IDS, ACTION_LABELS, DEFAULT_SHORTCUTS, type ActionId, type Binding } from '@/lib/shortcuts';
+import type { Send } from './ApiKeyCard';
+import { ApiKeyCard } from './ApiKeyCard';
+import { ExplanationsCard } from './ExplanationsCard';
 import { SecondsStepper } from './SecondsStepper';
 import { ShortcutRecorder } from './ShortcutRecorder';
 
@@ -27,6 +32,11 @@ const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark', icon: Moon },
   { value: 'system', label: 'System', icon: Monitor },
 ] as const satisfies readonly { value: ThemePreference; label: string; icon: LucideIcon }[];
+
+const SEEK_MODE_OPTIONS = [
+  { value: 'seconds', label: 'Seconds', icon: Timer },
+  { value: 'line', label: 'One line', icon: AlignLeft },
+] as const satisfies readonly { value: SeekMode; label: string; icon: LucideIcon }[];
 
 const ACTION_ICONS: Record<ActionId, ReactNode> = {
   rewind: <Rewind size={20} strokeWidth={2.5} fill="currentColor" aria-hidden />,
@@ -46,7 +56,7 @@ const ACTION_HINTS: Partial<Record<ActionId, string>> = {
   explainLine: 'Explain the current line.',
 };
 
-export function SettingsTab() {
+export function SettingsTab({ send }: { send?: Send } = {}) {
   const { settings, update } = useSettings();
   if (!settings) return <p className="text-sm font-semibold text-mute">Loading…</p>;
 
@@ -57,23 +67,37 @@ export function SettingsTab() {
     if (action === 'rewind')
       return (
         <>
-          Jump back
-          <SecondsStepper
-            label="Rewind seconds"
-            value={s.rewindSeconds}
-            onCommit={(rewindSeconds) => void update((cur) => ({ ...cur, rewindSeconds }))}
+          <SegmentedControl
+            label="Rewind jumps by"
+            value={s.rewindMode}
+            options={SEEK_MODE_OPTIONS}
+            onChange={(rewindMode) => void update((cur) => ({ ...cur, rewindMode }))}
           />
+          {s.rewindMode === 'seconds' && (
+            <SecondsStepper
+              label="Rewind seconds"
+              value={s.rewindSeconds}
+              onCommit={(rewindSeconds) => void update((cur) => ({ ...cur, rewindSeconds }))}
+            />
+          )}
         </>
       );
     if (action === 'forward')
       return (
         <>
-          Jump ahead
-          <SecondsStepper
-            label="Forward seconds"
-            value={s.forwardSeconds}
-            onCommit={(forwardSeconds) => void update((cur) => ({ ...cur, forwardSeconds }))}
+          <SegmentedControl
+            label="Forward jumps by"
+            value={s.forwardMode}
+            options={SEEK_MODE_OPTIONS}
+            onChange={(forwardMode) => void update((cur) => ({ ...cur, forwardMode }))}
           />
+          {s.forwardMode === 'seconds' && (
+            <SecondsStepper
+              label="Forward seconds"
+              value={s.forwardSeconds}
+              onCommit={(forwardSeconds) => void update((cur) => ({ ...cur, forwardSeconds }))}
+            />
+          )}
         </>
       );
     return ACTION_HINTS[action] ?? null;
@@ -117,6 +141,9 @@ export function SettingsTab() {
         </div>
       </section>
 
+      <ApiKeyCard send={send} />
+      <ExplanationsCard settings={settings} update={update} />
+
       <section aria-labelledby="shortcuts-heading" className={`${card} px-5 py-4`}>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -136,6 +163,8 @@ export function SettingsTab() {
                 shortcuts: DEFAULT_SHORTCUTS,
                 rewindSeconds: DEFAULT_SETTINGS.rewindSeconds,
                 forwardSeconds: DEFAULT_SETTINGS.forwardSeconds,
+                rewindMode: DEFAULT_SETTINGS.rewindMode,
+                forwardMode: DEFAULT_SETTINGS.forwardMode,
               }))
             }
             className={`${buttonSecondary} shrink-0`}
@@ -150,7 +179,7 @@ export function SettingsTab() {
               <span className={iconTile}>{ACTION_ICONS[action]}</span>
               <div className="min-w-0 flex-1">
                 <p className="text-base font-extrabold">{ACTION_LABELS[action]}</p>
-                <div className="mt-1 flex items-center gap-2 text-[13px] font-semibold text-mute">
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] font-semibold text-mute">
                   {actionDetail(action, settings)}
                 </div>
               </div>

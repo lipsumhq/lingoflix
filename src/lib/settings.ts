@@ -161,11 +161,18 @@ export async function saveSettings(settings: Settings): Promise<void> {
   await storage.setItem(SETTINGS_KEY, mergeForWrite(stored, normalizeSettings(settings)));
 }
 
-export async function updateSettings(update: (current: Settings) => Settings): Promise<Settings> {
-  const stored = await storage.getItem(SETTINGS_KEY);
-  const next = normalizeSettings(update(normalizeSettings(stored)));
-  await storage.setItem(SETTINGS_KEY, mergeForWrite(stored, next));
-  return next;
+/** Updates run one at a time, so two changes made at once can't both read the old value and drop one. */
+let updateQueue: Promise<unknown> = Promise.resolve();
+
+export function updateSettings(update: (current: Settings) => Settings): Promise<Settings> {
+  const run = updateQueue.then(async () => {
+    const stored = await storage.getItem(SETTINGS_KEY);
+    const next = normalizeSettings(update(normalizeSettings(stored)));
+    await storage.setItem(SETTINGS_KEY, mergeForWrite(stored, next));
+    return next;
+  });
+  updateQueue = run.catch(() => undefined);
+  return run;
 }
 
 export function watchSettings(callback: (settings: Settings) => void): () => void {
