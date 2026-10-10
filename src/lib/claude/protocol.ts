@@ -32,10 +32,31 @@ export type ExplainServerMessage =
   | { type: 'done'; explanation: Explanation; savedKeys: string[] }
   | { type: 'error'; code: ExplainErrorCode; message: string };
 
-const MAX_LINE_CHARS = 2000;
+/** The longest phrase, context line or story line a request may carry. */
+export const MAX_LINE_CHARS = 2000;
 const MAX_QUESTION_CHARS = 2000;
-/** More than the content script ever sends (STORY_SEND_LIMIT lines of normal subtitle length). */
-const MAX_STORY_CHARS = 200_000;
+/** The most characters the story so far may carry in all; the content script fits it with `fitStory`. */
+export const MAX_STORY_CHARS = 200_000;
+
+/** `text` cut to at most `max` code units, never between the two halves of a surrogate pair. */
+function cutText(text: string, max: number): string {
+  const last = text.charCodeAt(max - 1);
+  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
+}
+
+/**
+ * The story so far, fitted to what `parseClientMessage` accepts, so an unusual subtitle file can't make every
+ * request for its title fail: the newest STORY_SEND_LIMIT lines, each cut to MAX_LINE_CHARS, then the oldest
+ * dropped until the total is at most MAX_STORY_CHARS. A story within the limits comes back unchanged.
+ */
+export function fitStory(lines: readonly StoryLine[]): StoryLine[] {
+  const newest = lines.slice(Math.max(0, lines.length - STORY_SEND_LIMIT));
+  const cut = newest.map((line) => (line.text.length > MAX_LINE_CHARS ? { ...line, text: cutText(line.text, MAX_LINE_CHARS) } : line));
+  let total = cut.reduce((sum, line) => sum + line.text.length, 0);
+  let first = 0;
+  while (total > MAX_STORY_CHARS) total -= cut[first++]!.text.length;
+  return cut.slice(first);
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

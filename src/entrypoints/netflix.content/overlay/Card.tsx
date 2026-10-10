@@ -1,8 +1,11 @@
-import { ArrowUp, BookOpen, Loader2, RotateCcw, Settings as SettingsIcon, X } from 'lucide-react';
-import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { ArrowUp, BookOpen, Check, Loader2, Plus, RotateCcw, Settings as SettingsIcon, X } from 'lucide-react';
+import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { LogoMark } from '@/components/Logo';
 import { Markdown } from '@/components/Markdown';
-import type { Box, CardState } from './card-state';
+import { cardRows } from '@/lib/claude/suggestions';
+import { suggestionKey } from '@/lib/study-log/items';
+import type { Explanation, ItemType, SaveSuggestion } from '@/lib/study-log/types';
+import type { Box, CardState, SaveStatus } from './card-state';
 import { placeCard } from './positioning';
 
 export interface CardProps {
@@ -12,6 +15,8 @@ export interface CardProps {
   onRegenerate(): void;
   onRetry(): void;
   onFollowUp(question: string): void;
+  /** Saves a Save row, or removes it when it is saved. */
+  onToggleSave(row: SaveSuggestion): void;
   onClose(): void;
   onOpenSettings(): void;
   cardRef?(element: HTMLElement | null): void;
@@ -21,6 +26,12 @@ const secondaryButton =
   'inline-flex items-center gap-1.5 rounded-xl border-2 border-line bg-card px-3 py-1.5 text-[12px] font-extrabold tracking-wide text-ink uppercase shadow-[0_3px_0_var(--lf-line)] hover:bg-soft active:translate-y-[3px] active:shadow-none disabled:opacity-40';
 const primaryButton =
   'inline-flex items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-[12px] font-extrabold tracking-wide text-on-brand uppercase shadow-[0_3px_0_var(--lf-brand-edge)] active:translate-y-[3px] active:shadow-none';
+const saveToggle =
+  'inline-flex shrink-0 items-center gap-1 rounded-xl px-2.5 py-1 text-[12px] font-extrabold tracking-wide uppercase active:translate-y-[3px] active:shadow-none disabled:opacity-60';
+const saveButton = `${saveToggle} border-2 border-line bg-card text-ink shadow-[0_3px_0_var(--lf-line)] hover:bg-soft`;
+const savedButton = `${saveToggle} border-2 border-brand bg-brand text-on-brand shadow-[0_3px_0_var(--lf-brand-edge)]`;
+
+const TYPE_BADGE: Record<ItemType, string> = { word: 'WORD', phrase: 'PHRASE', idiom: 'IDIOM', line: 'LINE' };
 
 function ErrorBlock({ error, onRetry, onOpenSettings }: { error: NonNullable<CardState['error']>; onRetry(): void; onOpenSettings(): void }) {
   const needsSettings = error.code === 'no-key' || error.code === 'bad-key';
@@ -43,6 +54,63 @@ function ErrorBlock({ error, onRetry, onOpenSettings }: { error: NonNullable<Car
         </button>
       )}
     </div>
+  );
+}
+
+function SaveRow({ row, saved, status, onToggle }: { row: SaveSuggestion; saved: boolean; status: SaveStatus | undefined; onToggle(): void }) {
+  const wholeLine = row.type === 'line';
+  const label = status === 'error' ? "Couldn't save" : saved ? 'Saved' : 'Save';
+  const Icon = status === 'saving' ? Loader2 : saved ? Check : Plus;
+  return (
+    <li className="flex items-start gap-2.5">
+      <button
+        type="button"
+        aria-label={wholeLine ? 'Save whole line' : `Save "${row.text}"`}
+        aria-pressed={saved}
+        aria-busy={status === 'saving'}
+        disabled={status === 'saving'}
+        onClick={onToggle}
+        className={saved ? savedButton : saveButton}
+      >
+        <Icon size={14} strokeWidth={3} className={status === 'saving' ? 'animate-spin' : undefined} aria-hidden />
+        <span>{label}</span>
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[14px] leading-snug font-extrabold">{wholeLine ? 'Whole line' : row.text}</span>
+          <span className="rounded-lg bg-soft px-1.5 py-0.5 text-[10px] font-black tracking-wide text-mute">{TYPE_BADGE[row.type]}</span>
+        </p>
+        {row.meaning && <p className="text-[13px] leading-snug font-semibold text-mute">{row.meaning}</p>}
+      </div>
+    </li>
+  );
+}
+
+/** v2 spec §4.1: Claude's suggestions, then the whole line, each with a Save toggle. */
+function SaveSection({
+  explanation,
+  savedKeys,
+  saveStatus,
+  onToggle,
+}: {
+  explanation: Explanation;
+  savedKeys: readonly string[];
+  saveStatus: CardState['saveStatus'];
+  onToggle(row: SaveSuggestion): void;
+}) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} className="mt-3 border-t-2 border-soft pt-3">
+      <h3 id={headingId} className="text-[12px] font-extrabold tracking-wide text-mute uppercase">
+        Save
+      </h3>
+      <ul className="mt-2 flex flex-col gap-2">
+        {cardRows(explanation.suggestions, explanation.phrase).map((row) => {
+          const key = suggestionKey(explanation, row);
+          return <SaveRow key={key} row={row} saved={savedKeys.includes(key)} status={saveStatus[key]} onToggle={() => onToggle(row)} />;
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -91,8 +159,8 @@ function FollowUpBox({ busy, onSend }: { busy: boolean; onSend(question: string)
   );
 }
 
-/** The explanation card (spec §5.3–5.4), styled with the dark tokens (spec §5.10). */
-export function Card({ card, player, onRegenerate, onRetry, onFollowUp, onClose, onOpenSettings, cardRef }: CardProps) {
+/** The explanation card (spec §5.3–5.4, v2 spec §4.1), styled with the dark tokens (spec §5.10). */
+export function Card({ card, player, onRegenerate, onRetry, onFollowUp, onToggleSave, onClose, onOpenSettings, cardRef }: CardProps) {
   const element = useRef<HTMLElement | null>(null);
   const [naturalHeight, setNaturalHeight] = useState(320);
   useLayoutEffect(() => {
@@ -139,6 +207,9 @@ export function Card({ card, player, onRegenerate, onRetry, onFollowUp, onClose,
         )}
         {card.response && <Markdown>{card.response}</Markdown>}
         {card.error && <ErrorBlock error={card.error} onRetry={onRetry} onOpenSettings={onOpenSettings} />}
+        {card.status === 'done' && card.explanation && (
+          <SaveSection explanation={card.explanation} savedKeys={card.savedKeys} saveStatus={card.saveStatus} onToggle={onToggleSave} />
+        )}
         {card.followUps.map((followUp, i) => (
           <div key={i} className="mt-3 border-t-2 border-soft pt-3">
             <p className="text-[13px] font-extrabold text-tint-ink">{followUp.question}</p>
@@ -153,15 +224,15 @@ export function Card({ card, player, onRegenerate, onRetry, onFollowUp, onClose,
         ))}
       </div>
 
-      {card.sections.followUp && card.status === 'done' && card.entry && <FollowUpBox busy={card.followUpBusy} onSend={onFollowUp} />}
+      {card.sections.followUp && card.status === 'done' && card.explanation && <FollowUpBox busy={card.followUpBusy} onSend={onFollowUp} />}
 
       {card.status === 'done' && (
         <footer className="flex items-center justify-between gap-2 px-4 pt-2 pb-3">
           <span className="flex items-center gap-1.5 text-[12px] font-bold text-mute">
-            {card.fromStudyLog && (
+            {card.explainedBefore && (
               <>
                 <BookOpen size={14} aria-hidden />
-                From your Study Log
+                Explained before
               </>
             )}
           </span>

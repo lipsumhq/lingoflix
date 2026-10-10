@@ -21,7 +21,8 @@ export const connectExplainPort: Connect = () => browser.runtime.connect({ name:
 
 export interface StreamHandlers {
   onDelta(text: string): void;
-  onDone(explanation: Explanation): void;
+  /** The stored explanation, and the index keys of its Save rows that are saved (v2 spec §4.2). */
+  onDone(explanation: Explanation, savedKeys: string[]): void;
   onError(code: ExplainErrorCode, message: string): void;
 }
 
@@ -46,7 +47,7 @@ export function streamExplanation(connect: Connect, message: ExplainClientMessag
       handlers.onDelta(m.text);
     } else if (m.type === 'done') {
       finished = true;
-      handlers.onDone(m.explanation);
+      handlers.onDone(m.explanation, m.savedKeys);
       port.disconnect();
     } else if (m.type === 'error') {
       finished = true;

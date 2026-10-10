@@ -50,8 +50,9 @@ export default defineContentScript({
       bridge,
       pause,
       connect: connectExplainPort,
-      findEntry: async (videoId, language, phrase) =>
-        (await sendToBackground({ type: 'explanation:find', videoId, language, phrase })).explanation,
+      findExplanation: (videoId, language, phrase) => sendToBackground({ type: 'explanation:find', videoId, language, phrase }),
+      saveItem: async (explanationId, suggestion) => (await sendToBackground({ type: 'item:save', explanationId, suggestion })).key,
+      unsaveItem: async (explanationId, suggestion) => (await sendToBackground({ type: 'item:remove', explanationId, suggestion })).key,
       getSettings: () => settings,
       getVideoId,
       subtitleRects,
@@ -118,7 +119,13 @@ export default defineContentScript({
       createElement(OverlayApp, {
         store,
         // Close on the card closes like Escape: hover waits until the pointer leaves the line.
-        explain: { regenerate: explain.regenerate, retry: explain.retry, askFollowUp: explain.askFollowUp, close: runtime.closeCard },
+        explain: {
+          regenerate: explain.regenerate,
+          retry: explain.retry,
+          askFollowUp: explain.askFollowUp,
+          toggleSave: explain.toggleSave,
+          close: runtime.closeCard,
+        },
         playerRect: () => overlay?.playerRect() ?? null,
         openSettings: () => void sendToBackground({ type: 'open-options', hash: '#/settings' }),
         onCardElement: (element) => {

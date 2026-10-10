@@ -9,7 +9,7 @@ import {
   titleLine,
   type ExplainRequest,
 } from '@/lib/claude/prompt';
-import { parseClientMessage } from '@/lib/claude/protocol';
+import { MAX_LINE_CHARS, MAX_STORY_CHARS, fitStory, parseClientMessage } from '@/lib/claude/protocol';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
@@ -241,5 +241,68 @@ describe('parseClientMessage', () => {
     expect(start(Array.from({ length: STORY_SEND_LIMIT + 1 }, (_, i) => ({ startMs: i, text: 'x' })))).toBeNull();
     expect(start(Array.from({ length: 101 }, (_, i) => ({ startMs: i, text: 'x'.repeat(2000) })))).toBeNull(); // 202 000 characters
     expect(start(Array.from({ length: STORY_SEND_LIMIT }, (_, i) => ({ startMs: i, text: 'line' })))).not.toBeNull();
+  });
+});
+
+describe('fitStory (the story so far always fits what parseClientMessage accepts)', () => {
+  const request: ExplainRequest = {
+    phrase: 'Hi',
+    context: { before: [], after: [] },
+    title: EPISODE,
+    videoId: '80077211',
+    videoTimeMs: 10_000,
+    language: 'ko',
+    sections: ALL,
+    storySoFar: [],
+  };
+  const accepted = (storySoFar: StoryLine[]) => parseClientMessage({ type: 'start', request: { ...request, storySoFar } }) !== null;
+  const lines = (count: number, chars: number): StoryLine[] =>
+    Array.from({ length: count }, (_, i) => ({ startMs: i * 1000, text: `${i}:`.padEnd(chars, 'x') }));
+
+  it('leaves a story within the limits unchanged', () => {
+    const story: StoryLine[] = [
+      { startMs: 1000, text: 'Earlier line' },
+      { startMs: 4000, text: 'Another line' },
+    ];
+    expect(fitStory(story)).toEqual(story);
+    expect(fitStory([])).toEqual([]);
+    const full = lines(STORY_SEND_LIMIT, 200); // exactly the total limit
+    expect(fitStory(full)).toEqual(full);
+  });
+
+  it('cuts a line over the per-line limit', () => {
+    const story: StoryLine[] = [
+      { startMs: 1000, text: 'Earlier line' },
+      { startMs: 4000, text: 'y'.repeat(5000) },
+    ];
+    expect(accepted(story)).toBe(false);
+    const fitted = fitStory(story);
+    expect(accepted(fitted)).toBe(true);
+    expect(fitted).toEqual([
+      { startMs: 1000, text: 'Earlier line' },
+      { startMs: 4000, text: 'y'.repeat(MAX_LINE_CHARS) },
+    ]);
+  });
+
+  it('does not split a character made of two code units when cutting', () => {
+    const fitted = fitStory([{ startMs: 0, text: `${'y'.repeat(MAX_LINE_CHARS - 1)}\u{1F600} and more` }]);
+    expect(fitted).toEqual([{ startMs: 0, text: 'y'.repeat(MAX_LINE_CHARS - 1) }]);
+  });
+
+  it('drops the oldest lines until the total fits, keeping the newest in order', () => {
+    const story = lines(1000, 300); // 300 000 characters
+    expect(accepted(story)).toBe(false);
+    const fitted = fitStory(story);
+    expect(accepted(fitted)).toBe(true);
+    expect(fitted).toEqual(story.slice(-Math.floor(MAX_STORY_CHARS / 300)));
+  });
+
+  it('keeps at most the newest STORY_SEND_LIMIT lines, and applies every limit at once', () => {
+    const long = lines(STORY_SEND_LIMIT + 500, 10);
+    expect(fitStory(long)).toEqual(long.slice(-STORY_SEND_LIMIT));
+    const huge = lines(STORY_SEND_LIMIT + 500, 5000);
+    const fitted = fitStory(huge);
+    expect(accepted(fitted)).toBe(true);
+    expect(fitted.map((l) => l.startMs)).toEqual(huge.slice(-(MAX_STORY_CHARS / MAX_LINE_CHARS)).map((l) => l.startMs));
   });
 });

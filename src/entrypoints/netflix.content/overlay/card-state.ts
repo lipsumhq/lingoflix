@@ -19,6 +19,9 @@ export interface FollowUpView {
   error: string | null;
 }
 
+/** A Save row with a save or removal in flight, or whose last save failed (v2 spec §4.1, §9). */
+export type SaveStatus = 'saving' | 'error';
+
 export interface CardState {
   /** New for every opened card, so late answers for an old card are dropped. */
   key: number;
@@ -29,13 +32,18 @@ export interface CardState {
   openedBy: 'hover' | 'shortcut';
   status: 'loading' | 'streaming' | 'done' | 'error';
   response: string;
-  /** The Study Log entry once saved or found. */
-  entry: Explanation | null;
+  /** The stored explanation, once Claude finished or when found in the history. */
+  explanation: Explanation | null;
   error: { code: CardErrorCode; message: string } | null;
   followUps: FollowUpView[];
   followUpBusy: boolean;
   sections: CardSections;
-  fromStudyLog: boolean;
+  /** Shown from the explanation history without asking Claude ("Explained before"). */
+  explainedBefore: boolean;
+  /** Index keys (`suggestionKey`) of this line's Save rows that are saved. */
+  savedKeys: string[];
+  /** By row key: rows with a request in flight, or whose last save failed. */
+  saveStatus: Record<string, SaveStatus>;
 }
 
 export const IMAGE_SUBTITLES_MESSAGE = "This title's subtitles can't be read as text";

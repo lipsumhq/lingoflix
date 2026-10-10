@@ -5,7 +5,7 @@ import { useStore, type Store } from './store';
 
 export interface OverlayAppProps {
   store: Store<CardState | null>;
-  explain: Pick<ExplainController, 'regenerate' | 'retry' | 'askFollowUp' | 'close'>;
+  explain: Pick<ExplainController, 'regenerate' | 'retry' | 'askFollowUp' | 'toggleSave' | 'close'>;
   playerRect(): Box | null;
   openSettings(): void;
   onCardElement(element: HTMLElement | null): void;
@@ -22,6 +22,7 @@ export function OverlayApp({ store, explain, playerRect, openSettings, onCardEle
       onRegenerate={explain.regenerate}
       onRetry={explain.retry}
       onFollowUp={explain.askFollowUp}
+      onToggleSave={explain.toggleSave}
       onClose={explain.close}
       onOpenSettings={openSettings}
       cardRef={onCardElement}
