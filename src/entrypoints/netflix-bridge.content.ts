@@ -1,7 +1,7 @@
 import { defineContentScript } from '#imports';
 import { createPlayerMethods, findPlayer, metadataVideoFrom } from '@/lib/bridge/player';
 import { serveBridge } from '@/lib/bridge/server';
-import { createManifestStore, installManifestCapture, manifestFromPlayer, type ManifestWindow } from '@/lib/netflix/manifest';
+import { createManifestSource, createManifestStore, installManifestCapture, type ManifestWindow } from '@/lib/netflix/manifest';
 import { parseWatchVideoId } from '@/lib/netflix/video-id';
 
 export default defineContentScript({
@@ -18,8 +18,8 @@ export default defineContentScript({
     serveBridge(
       document,
       createPlayerMethods(() => findPlayer(netflix(), videoId()), videoId, {
-        // The player's own memory first (docs/netflix-internals.md row 3), then anything the hook captured.
-        getManifest: (movieId, player) => manifestFromPlayer(player, movieId) ?? manifests.get(movieId),
+        // The player's own memory first (docs/netflix-internals.md row 3), then the hook, then a throttled search.
+        getManifest: createManifestSource(manifests),
         getMetadataVideo: (id) => metadataVideoFrom(netflix(), id),
         getDocument: () => document,
       }),

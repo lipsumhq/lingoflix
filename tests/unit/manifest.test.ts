@@ -1,11 +1,21 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
-import { createManifestStore, extractTextTracks, installManifestCapture, manifestFromPlayer } from '@/lib/netflix/manifest';
+import {
+  SEARCH_COOLDOWN_MS,
+  SEARCH_LIMITS,
+  createManifestSource,
+  createManifestStore,
+  extractTextTracks,
+  installManifestCapture,
+  manifestAtKnownPath,
+  searchPlayerForManifest,
+} from '@/lib/netflix/manifest';
 
 /** Shaped like the manifest in Netflix's player memory (track probe, 2026-10-10). */
 const LIVE_URL = 'https://ipv4-c192-lax009-ix.1.oca.nflxvideo.net/?o=1&v=93&e=1791706398';
 const NONE_TRACK = 'T:2:1;1;NONE;0;1;0;0;';
 const EN_CC = 'T:2:1;1;en;0;0;0;0;';
+const fileUrl = (movieId: number, tag: string) => `${LIVE_URL}&m=${movieId}&p=${tag}`;
 const liveManifest = (movieId: number, isAd = false) => ({
   movieId,
   isAd,
@@ -23,7 +33,7 @@ const liveManifest = (movieId: number, isAd = false) => ({
           ['imsc1.1', 'imsc'],
           ['simplesdh', 'simplesdh'],
           ['dfxp-ls-sdh', 'dfxp'],
-        ].map(([profile, tag]) => [profile, { size: 1, isImage: false, urls: [{ cdnId: 1, url: `${LIVE_URL}&p=${tag}`, cdn_id: 1 }] }]),
+        ].map(([profile, tag]) => [profile, { size: 1, isImage: false, urls: [{ cdnId: 1, url: fileUrl(movieId, tag!), cdn_id: 1 }] }]),
       ),
     },
   ],
@@ -94,62 +104,181 @@ describe('extractTextTracks', () => {
           language: 'en',
           isImageBased: false,
           isNone: false,
-          urls: [`${LIVE_URL}&p=dfxp`, `${LIVE_URL}&p=imsc`, `${LIVE_URL}&p=simplesdh`],
+          urls: [fileUrl(82028221, 'dfxp'), fileUrl(82028221, 'imsc'), fileUrl(82028221, 'simplesdh')],
         },
       ],
     });
   });
+
+  it('merges both track lists track by track, keeping the entry that has files', () => {
+    const withFiles = { new_track_id: 'T:ja', language: 'ja', ttDownloadables: { 'dfxp-ls-sdh': { urls: [{ url: 'https://cdn.example/ja' }] } } };
+    expect(
+      extractTextTracks({
+        movieId: 1,
+        textTracks: [{ id: 'T:ja', new_track_id: 'T:ja', language: 'ja', ttDownloadables: {} }],
+        timedtexttracks: [withFiles, { new_track_id: 'T:ko', language: 'ko' }],
+      })?.tracks,
+    ).toEqual([
+      { ids: ['T:ja'], language: 'ja', isImageBased: false, isNone: false, urls: ['https://cdn.example/ja'] },
+      { ids: ['T:ko'], language: 'ko', isImageBased: false, isNone: false, urls: [] },
+    ]);
+  });
 });
 
-describe('manifestFromPlayer', () => {
-  const playerWith = (internal: unknown) => ({ getInternalPlayer: () => internal });
-  const atKnownPath = (manifestResult: unknown, playback: Record<string, unknown> = {}) =>
-    playerWith({ playback: { segmentWithBoundObservables: { manifest: { manifestResult } }, ...playback } });
+const playerWith = (internal: unknown) => ({ getInternalPlayer: () => internal });
+const atKnownPath = (manifestResult: unknown, playback: Record<string, unknown> = {}) =>
+  playerWith({ playback: { segmentWithBoundObservables: { manifest: { manifestResult } }, ...playback } });
 
-  it('reads the playing episode from player memory, not the ad manifest beside it', () => {
+describe('manifestAtKnownPath', () => {
+  it('reads the playing episode from player memory', () => {
     const episode = { ...liveManifest(82028221), auxiliaryManifests: [liveManifest(83236072, true)] };
-    const found = manifestFromPlayer(atKnownPath(episode), '82028221');
+    const found = manifestAtKnownPath(atKnownPath(episode), '82028221');
     expect(found?.movieId).toBe('82028221');
-    expect(found?.tracks.find((t) => t.ids.includes(EN_CC))?.urls[0]).toBe(`${LIVE_URL}&p=dfxp`);
+    expect(found?.tracks.find((t) => t.ids.includes(EN_CC))?.urls[0]).toBe(fileUrl(82028221, 'dfxp'));
   });
 
-  it("finds the episode when the known path holds another title's manifest (an ad playing)", () => {
+  it("ignores another title's manifest there (an ad playing), even one wrapped around a matching id", () => {
+    expect(manifestAtKnownPath(atKnownPath(liveManifest(83236072, true)), '82028221')).toBeUndefined();
+    const wrapped = { movieId: 82028221, result: liveManifest(83236072, true) };
+    expect(manifestAtKnownPath(atKnownPath(wrapped), '82028221')).toBeUndefined();
+  });
+
+  it('never runs Netflix code: getters, prototype getters, custom iterators, or an object id', () => {
+    const pathGetter = vi.fn(() => liveManifest(82028221));
+    expect(manifestAtKnownPath(playerWith({ playback: Object.defineProperty({}, 'segmentWithBoundObservables', { get: pathGetter }) }), '82028221')).toBeUndefined();
+
+    const protoGetter = vi.fn(() => liveManifest(82028221).textTracks);
+    class Hydrated {
+      movieId = 82028221;
+      get textTracks() {
+        return protoGetter();
+      }
+    }
+    expect(manifestAtKnownPath(atKnownPath(new Hydrated()), '82028221')).toBeUndefined();
+
+    const iterate = vi.fn();
+    const map = vi.fn();
+    class TrackList extends Array {
+      override [Symbol.iterator]() {
+        iterate();
+        return super[Symbol.iterator]();
+      }
+      override map<U>(fn: (v: unknown, i: number, a: unknown[]) => U): U[] {
+        map();
+        return super.map(fn);
+      }
+    }
+    const live = liveManifest(82028221);
+    const custom = { ...live, textTracks: TrackList.from(live.textTracks), timedtexttracks: undefined };
+    expect(manifestAtKnownPath(atKnownPath(custom), '82028221')?.tracks[1]?.urls).toHaveLength(3);
+
+    const downloadGetter = vi.fn(() => ({ urls: [{ url: 'https://x' }] }));
+    const track = { new_track_id: EN_CC, ttDownloadables: Object.defineProperty({}, 'dfxp', { get: downloadGetter, enumerable: true }) };
+    manifestAtKnownPath(atKnownPath({ movieId: 82028221, textTracks: [track] }), '82028221');
+
+    const toStringSpy = vi.fn(() => '82028221');
+    expect(manifestAtKnownPath(atKnownPath({ ...live, movieId: { toString: toStringSpy } }), '82028221')).toBeUndefined();
+
+    for (const spy of [pathGetter, protoGetter, iterate, map, downloadGetter, toStringSpy]) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('never throws', () => {
+    expect(manifestAtKnownPath({ getInternalPlayer: () => { throw new Error('gone'); } }, '82028221')).toBeUndefined();
+    expect(manifestAtKnownPath(null, '82028221')).toBeUndefined();
+    expect(manifestAtKnownPath({}, '82028221')).toBeUndefined();
+    const hostile = new Proxy({}, { getOwnPropertyDescriptor: () => { throw new Error('nope'); } });
+    expect(manifestAtKnownPath(playerWith({ playback: hostile }), '82028221')).toBeUndefined();
+  });
+});
+
+describe('searchPlayerForManifest', () => {
+  it("finds the episode elsewhere in memory, e.g. while an ad's manifest is on the known path", () => {
     const player = atKnownPath(liveManifest(83236072, true), { segments: [{ manifest: { manifestResult: liveManifest(82028221) } }] });
-    expect(manifestFromPlayer(player, '82028221')?.movieId).toBe('82028221');
-    expect(manifestFromPlayer(atKnownPath(liveManifest(83236072, true)), '82028221')).toBeUndefined();
+    const found = searchPlayerForManifest(player, '82028221');
+    expect(found?.movieId).toBe('82028221');
+    expect(found?.tracks[1]?.urls[0]).toBe(fileUrl(82028221, 'dfxp'));
   });
 
-  it('still finds it if Netflix renames a step of the path, within a bounded search', () => {
-    expect(manifestFromPlayer(playerWith({ playback: { renamed: { manifestResult: liveManifest(82028221) } } }), '82028221')?.movieId).toBe(
-      '82028221',
-    );
-    let deep: Record<string, unknown> = { manifestResult: liveManifest(82028221) };
-    for (let i = 0; i < 10; i++) deep = { next: deep };
-    expect(manifestFromPlayer(playerWith(deep), '82028221')).toBeUndefined();
+  it(`still finds it if Netflix renames a step, down to depth ${SEARCH_LIMITS.depth} and no further`, () => {
+    const chain = (links: number) => {
+      let node: Record<string, unknown> = { manifestResult: liveManifest(82028221) };
+      for (let i = 0; i < links; i++) node = { next: node };
+      return playerWith(node);
+    };
+    // The internal player is depth 0; with n links the manifest sits at depth n + 1.
+    expect(searchPlayerForManifest(chain(SEARCH_LIMITS.depth - 1), '82028221')?.movieId).toBe('82028221');
+    expect(searchPlayerForManifest(chain(SEARCH_LIMITS.depth), '82028221')).toBeUndefined();
   });
 
-  it('never runs Netflix getters, skips objects that refuse to be read, and never throws', () => {
-    const getter = vi.fn(() => liveManifest(82028221));
-    const sneaky = Object.defineProperty({}, 'manifestResult', { get: getter, enumerable: true });
+  it('skips objects that refuse to be read and keeps going', () => {
     const hostile = new Proxy({}, { ownKeys: () => { throw new Error('nope'); } });
-    const player = playerWith({ playback: { a: hostile, segmentWithBoundObservables: { manifest: sneaky }, b: { manifestResult: liveManifest(82028221) } } });
-    expect(manifestFromPlayer(player, '82028221')?.movieId).toBe('82028221');
-    expect(getter).not.toHaveBeenCalled();
-    expect(manifestFromPlayer({ getInternalPlayer: () => { throw new Error('gone'); } }, '82028221')).toBeUndefined();
-    expect(manifestFromPlayer(null, '82028221')).toBeUndefined();
-    expect(manifestFromPlayer({}, '82028221')).toBeUndefined();
+    const player = playerWith({ playback: { a: hostile, b: { manifestResult: liveManifest(82028221) } } });
+    expect(searchPlayerForManifest(player, '82028221')?.movieId).toBe('82028221');
+    expect(searchPlayerForManifest({ getInternalPlayer: () => { throw new Error('gone'); } }, '82028221')).toBeUndefined();
   });
 
-  it('does not walk into media buffers or page elements', () => {
+  it('does not walk into media buffers, page elements, the window, or huge lists', () => {
     const buffer = new Uint8Array(16);
     const element = document.createElement('div');
+    const big = Array.from({ length: SEARCH_LIMITS.keysPerObject + 1 }, (_, i) => ({ i }));
+    const playback = { buffer, element, win: globalThis, big, hidden: { manifestResult: liveManifest(82028221) } };
     const names = vi.spyOn(Object, 'getOwnPropertyNames');
     try {
-      manifestFromPlayer(playerWith({ playback: { buffer, element } }), '82028221');
-      expect(names.mock.calls.some(([obj]) => obj === buffer || obj === element)).toBe(false);
+      expect(searchPlayerForManifest(playerWith({ playback }), '82028221')?.movieId).toBe('82028221');
+      expect(names.mock.calls.some(([obj]) => obj === playback)).toBe(true);
+      expect(names.mock.calls.some(([obj]) => obj === buffer || obj === element || obj === globalThis || obj === big)).toBe(false);
     } finally {
       names.mockRestore();
     }
+  });
+
+  it('stops after a fixed number of property reads', () => {
+    const wide: Record<string, unknown> = {};
+    for (let i = 0; i < 60; i++) wide[`n${i}`] = Object.fromEntries(Array.from({ length: 1000 }, (_, k) => [`k${k}`, k]));
+    wide.zz = { deeper: { manifestResult: liveManifest(82028221) } };
+    const descriptors = vi.spyOn(Object, 'getOwnPropertyDescriptor');
+    try {
+      expect(searchPlayerForManifest(playerWith({ playback: wide }), '82028221')).toBeUndefined();
+      expect(descriptors.mock.calls.length).toBeLessThan(SEARCH_LIMITS.reads + SEARCH_LIMITS.keysPerObject + 200);
+    } finally {
+      descriptors.mockRestore();
+    }
+  });
+});
+
+describe('createManifestSource', () => {
+  it('uses the known path first, then what the hook captured, then a search', () => {
+    const store = createManifestStore();
+    const getManifest = createManifestSource(store, () => 0);
+    expect(getManifest('82028221', atKnownPath(liveManifest(82028221)))?.tracks).toHaveLength(2);
+
+    const captured = { movieId: '82028221', tracks: [{ ids: ['T:x'], language: 'x', isImageBased: false, isNone: false, urls: ['https://cdn.example/x'] }] };
+    store.add(captured);
+    const getInternalPlayer = vi.fn(() => ({ playback: { elsewhere: { manifestResult: liveManifest(82028221) } } }));
+    expect(getManifest('82028221', { getInternalPlayer })).toBe(captured);
+    expect(getInternalPlayer).toHaveBeenCalledTimes(1); // the known path only: no search
+  });
+
+  it('searches at most once per cooldown while it misses, and keeps what it found', () => {
+    let now = 0;
+    const internal: { playback: Record<string, unknown> } = { playback: {} };
+    const getInternalPlayer = vi.fn(() => internal);
+    const getManifest = createManifestSource(createManifestStore(), () => now);
+    const player = { getInternalPlayer };
+
+    expect(getManifest('82028221', player)).toBeUndefined();
+    expect(getInternalPlayer).toHaveBeenCalledTimes(2); // known path + search
+    now = SEARCH_COOLDOWN_MS - 1;
+    expect(getManifest('82028221', player)).toBeUndefined();
+    expect(getInternalPlayer).toHaveBeenCalledTimes(3); // known path only
+
+    internal.playback.renamed = { manifestResult: liveManifest(82028221) };
+    now = SEARCH_COOLDOWN_MS;
+    expect(getManifest('82028221', player)?.movieId).toBe('82028221');
+    expect(getInternalPlayer).toHaveBeenCalledTimes(5);
+    now += 1;
+    expect(getManifest('82028221', player)?.movieId).toBe('82028221');
+    expect(getInternalPlayer).toHaveBeenCalledTimes(6); // kept: no new search
   });
 });
 
@@ -183,6 +312,15 @@ describe('installManifestCapture', () => {
     expect(FakeResponse.prototype.json).toBe(originalJson);
   });
 
+  it('reports manifests that only use the new list name (textTracks)', () => {
+    const win = { JSON: { parse: JSON.parse } } as unknown as Parameters<typeof installManifestCapture>[0];
+    const seen = vi.fn();
+    installManifestCapture(win, seen);
+    const { timedtexttracks: _old, ...renamedOnly } = liveManifest(82028221);
+    win.JSON.parse(JSON.stringify(renamedOnly));
+    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ movieId: '82028221' }));
+  });
+
   it('a broken manifest never breaks Netflix', () => {
     const win = { JSON: { parse: JSON.parse } } as unknown as Parameters<typeof installManifestCapture>[0];
     installManifestCapture(win, () => {
@@ -200,5 +338,17 @@ describe('createManifestStore', () => {
     store.add({ movieId: '3', tracks: [] });
     expect(store.get('1')).toBeUndefined();
     expect(store.get('3')).toEqual({ movieId: '3', tracks: [] });
+  });
+
+  it('never replaces a capture that has files with one that has none', () => {
+    const store = createManifestStore();
+    const track = { ids: ['T:en'], language: 'en', isImageBased: false, isNone: false };
+    const good = { movieId: '1', tracks: [{ ...track, urls: ['https://cdn.example/en'] }] };
+    store.add(good);
+    store.add({ movieId: '1', tracks: [{ ...track, urls: [] }] });
+    expect(store.get('1')).toBe(good);
+    const newer = { movieId: '1', tracks: [{ ...track, urls: ['https://cdn.example/en2'] }] };
+    store.add(newer);
+    expect(store.get('1')).toBe(newer);
   });
 });

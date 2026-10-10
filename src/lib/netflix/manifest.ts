@@ -16,21 +16,47 @@ export interface CapturedManifest {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+const isId = (value: unknown): value is string | number => typeof value === 'string' || typeof value === 'number';
+
+/*
+ * Manifests may be read from Netflix's own objects (MAIN world), so everything here reads own data
+ * properties only, and arrays by index: no getter, iterator, or method of Netflix's runs.
+ */
+function field(obj: unknown, key: string): unknown {
+  if (typeof obj !== 'object' || obj === null) return undefined;
+  const d = Object.getOwnPropertyDescriptor(obj, key);
+  return d && 'value' in d ? d.value : undefined;
+}
+
+const MAX_ITEMS = 1000;
+
+function items(list: unknown): unknown[] {
+  if (!Array.isArray(list)) return [];
+  const length = field(list, 'length');
+  if (typeof length !== 'number') return [];
+  const out: unknown[] = [];
+  for (let i = 0; i < Math.min(length, MAX_ITEMS); i++) out.push(field(list, String(i)));
+  return out;
+}
+
+function entries(obj: unknown): [string, unknown][] {
+  if (!isRecord(obj)) return [];
+  return Object.getOwnPropertyNames(obj).map((key) => [key, field(obj, key)]);
+}
 
 /** Text profiles we can parse, best first. Image profiles (e.g. `nflx-cmisc`) are not text. */
 const TEXT_PROFILES = [/^dfxp/, /^imsc/, /^simplesdh/, /^webvtt/, /ttml/];
 
 function idsOf(track: Record<string, unknown>): string[] {
   return ['new_track_id', 'id', 'trackId']
-    .map((key) => track[key])
-    .filter((v): v is string | number => typeof v === 'string' || typeof v === 'number')
+    .map((key) => field(track, key))
+    .filter(isId)
     .map(String);
 }
 
 function urlsOf(download: unknown): string[] {
-  if (!isRecord(download)) return [];
-  const listed = Array.isArray(download.urls) ? download.urls.map((u) => (isRecord(u) ? u.url : u)) : [];
-  const mapped = isRecord(download.downloadUrls) ? Object.values(download.downloadUrls) : [];
+  const listed = items(field(download, 'urls')).map((u) => (isRecord(u) ? field(u, 'url') : u));
+  const mapped = entries(field(download, 'downloadUrls')).map(([, u]) => u);
   return [...listed, ...mapped].filter((u): u is string => typeof u === 'string' && u.startsWith('https://'));
 }
 
@@ -38,38 +64,50 @@ function urlsOf(download: unknown): string[] {
 const TRACK_LISTS = ['textTracks', 'timedtexttracks'] as const;
 
 export function extractTextTracks(parsed: unknown): CapturedManifest | null {
-  if (!isRecord(parsed)) return null;
-  const root = isRecord(parsed.result) ? parsed.result : parsed;
-  const lists = TRACK_LISTS.map((key) => root[key]).filter(Array.isArray);
+  const wrapped = field(parsed, 'result');
+  const root = isRecord(wrapped) ? wrapped : parsed;
+  if (!isRecord(root)) return null;
+  const lists = TRACK_LISTS.map((key) => field(root, key)).filter(Array.isArray);
   if (!lists.length) return null;
-  const movieId = root.movieId;
-  if (typeof movieId !== 'string' && typeof movieId !== 'number') return null;
-
-  const parsedLists = lists.map(tracksFrom);
-  const tracks = parsedLists.find((list) => list.some((t) => t.urls.length > 0)) ?? parsedLists[0]!;
-  return { movieId: String(movieId), tracks };
+  const movieId = field(root, 'movieId');
+  if (!isId(movieId)) return null;
+  return { movieId: String(movieId), tracks: mergeTracks(lists.map(tracksFrom)) };
 }
 
-function tracksFrom(list: unknown[]): CapturedTrack[] {
+/** Both lists can describe the same tracks: keep each track once, preferring the entry that has files. */
+function mergeTracks(lists: CapturedTrack[][]): CapturedTrack[] {
+  const merged: CapturedTrack[] = [];
+  for (const list of lists) {
+    for (const track of list) {
+      const i = merged.findIndex((t) => t.ids.some((id) => track.ids.includes(id)));
+      if (i === -1) merged.push(track);
+      else if (merged[i]!.urls.length === 0 && track.urls.length > 0) merged[i] = track;
+    }
+  }
+  return merged;
+}
+
+function tracksFrom(list: unknown): CapturedTrack[] {
   const tracks: CapturedTrack[] = [];
-  for (const raw of list) {
+  for (const raw of items(list)) {
     if (!isRecord(raw)) continue;
     const ids = idsOf(raw);
     if (!ids.length) continue;
-    const downloads = isRecord(raw.ttDownloadables) ? Object.entries(raw.ttDownloadables) : [];
+    const downloads = entries(field(raw, 'ttDownloadables'));
     const text = downloads
       .map(([profile, d]) => ({
         rank: TEXT_PROFILES.findIndex((re) => re.test(profile)),
-        image: isRecord(d) && d.isImage === true,
+        image: field(d, 'isImage') === true,
         urls: urlsOf(d),
       }))
       .filter((d) => d.rank >= 0 && !d.image && d.urls.length > 0)
       .sort((a, b) => a.rank - b.rank);
+    const language = field(raw, 'language');
     tracks.push({
       ids,
-      language: typeof raw.language === 'string' ? raw.language : '',
-      isImageBased: raw.isImageBased === true || (downloads.length > 0 && text.length === 0),
-      isNone: raw.isNoneTrack === true,
+      language: typeof language === 'string' ? language : '',
+      isImageBased: field(raw, 'isImageBased') === true || (downloads.length > 0 && text.length === 0),
+      isNone: field(raw, 'isNoneTrack') === true,
       urls: text.flatMap((d) => d.urls),
     });
   }
@@ -78,56 +116,76 @@ function tracksFrom(list: unknown[]): CapturedTrack[] {
 
 /** Where the playing title's manifest sits in `player.getInternalPlayer()` (docs/netflix-internals.md row 3). */
 const MANIFEST_PATH = ['playback', 'segmentWithBoundObservables', 'manifest', 'manifestResult'];
-/** If Netflix renames a step of that path, search this deep (the path is 4) and no further. */
-const SEARCH_DEPTH = 6;
-const SEARCH_BUDGET = 20_000;
 
-/** Reads a plain data property; getters are never run, so no Netflix code runs. */
-function dataProperty(obj: object, key: string): unknown {
-  const d = Object.getOwnPropertyDescriptor(obj, key);
-  return d && 'value' in d ? d.value : undefined;
+/** If Netflix renames a step of that path: how deep to look (the path is 4), and how much to read in all. */
+export const SEARCH_LIMITS = { depth: 6, reads: 50_000, keysPerObject: 2_000 } as const;
+/** While the search misses, it runs at most this often per title (the content script asks on every line). */
+export const SEARCH_COOLDOWN_MS = 5_000;
+
+function internalPlayerOf(player: unknown): unknown {
+  // A Netflix player API method, called on purpose like getSegmentTime().
+  const get = typeof player === 'object' && player !== null ? (player as { getInternalPlayer?: unknown }).getInternalPlayer : undefined;
+  return typeof get === 'function' ? get.call(player) : undefined;
 }
 
+/** The manifest of `movieId` itself: other manifests in memory (ads, previews) have another movieId. */
 function manifestOf(candidate: unknown, movieId: string): CapturedManifest | null {
-  if (!isRecord(candidate) || String(dataProperty(candidate, 'movieId')) !== movieId) return null;
-  return extractTextTracks(candidate);
+  const id = field(candidate, 'movieId');
+  if (!isId(id) || String(id) !== movieId) return null;
+  const manifest = extractTextTracks(candidate);
+  return manifest?.movieId === movieId ? manifest : null;
 }
 
-/** Objects worth looking inside: not media buffers (huge) and not page elements (they lead into React). */
+/** The playing title's manifest at its known place in Netflix's player memory (MAIN world). Never throws. */
+export function manifestAtKnownPath(player: unknown, movieId: string): CapturedManifest | undefined {
+  try {
+    let node = internalPlayerOf(player);
+    for (const key of MANIFEST_PATH) node = field(node, key);
+    return manifestOf(node, movieId) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Objects worth looking inside: not media buffers (huge), page elements (they lead into React), or windows. */
 function walkable(value: unknown): value is object {
-  if (typeof value !== 'object' || value === null) return false;
+  if (typeof value !== 'object' || value === null || value === globalThis) return false;
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return false;
+  if (typeof Window !== 'undefined' && value instanceof Window) return false;
   return typeof Node === 'undefined' || !(value instanceof Node);
 }
 
 /**
- * The text tracks of `movieId`, read from Netflix's player memory (MAIN world): the known path first,
- * then a bounded breadth-first search. Other manifests there (ads, previews) have another movieId. Never throws.
+ * A bounded breadth-first search of Netflix's player memory for the manifest of `movieId`, in case
+ * Netflix renames a step of the known path. Never throws.
  */
-export function manifestFromPlayer(player: unknown, movieId: string): CapturedManifest | undefined {
-  let internal: unknown;
+export function searchPlayerForManifest(player: unknown, movieId: string): CapturedManifest | undefined {
+  let root: unknown;
   try {
-    internal = (player as { getInternalPlayer?(): unknown } | null)?.getInternalPlayer?.();
-    let known: unknown = internal;
-    for (const key of MANIFEST_PATH) known = walkable(known) ? dataProperty(known, key) : undefined;
-    const direct = manifestOf(known, movieId);
-    if (direct) return direct;
+    root = internalPlayerOf(player);
   } catch {
     return undefined;
   }
-
   const seen = new Set<object>();
-  let level: object[] = walkable(internal) ? [internal] : [];
-  for (let depth = 0; depth <= SEARCH_DEPTH && level.length > 0; depth++) {
+  let reads = 0;
+  let level: object[] = walkable(root) ? [root] : [];
+  for (let depth = 0; depth <= SEARCH_LIMITS.depth && level.length > 0; depth++) {
     const next: object[] = [];
     for (const obj of level) {
-      if (seen.has(obj) || seen.size >= SEARCH_BUDGET) continue;
+      if (seen.has(obj)) continue;
+      if (reads >= SEARCH_LIMITS.reads) return undefined;
       seen.add(obj);
       try {
+        reads++;
         const found = manifestOf(obj, movieId);
         if (found) return found;
-        for (const key of Object.getOwnPropertyNames(obj)) {
-          const value = dataProperty(obj, key);
+        const length = Array.isArray(obj) ? field(obj, 'length') : undefined;
+        if (typeof length === 'number' && length > SEARCH_LIMITS.keysPerObject) continue;
+        const keys = Object.getOwnPropertyNames(obj);
+        reads += keys.length;
+        if (keys.length > SEARCH_LIMITS.keysPerObject) continue;
+        for (const key of keys) {
+          const value = field(obj, key);
           if (walkable(value) && !seen.has(value)) next.push(value);
         }
       } catch {
@@ -137,6 +195,24 @@ export function manifestFromPlayer(player: unknown, movieId: string): CapturedMa
     level = next;
   }
   return undefined;
+}
+
+/**
+ * Where the bridge gets a title's manifest: the player's memory at the known path, then what the
+ * capture hook saw, then a search of player memory (at most once per cooldown while it misses).
+ */
+export function createManifestSource(captured: { get(movieId: string): CapturedManifest | undefined }, now: () => number = Date.now) {
+  const searches = new Map<string, { at: number; found: CapturedManifest | undefined }>();
+  return (movieId: string, player: unknown): CapturedManifest | undefined => {
+    const known = manifestAtKnownPath(player, movieId) ?? captured.get(movieId);
+    if (known) return known;
+    const last = searches.get(movieId);
+    if (last?.found) return last.found;
+    if (last && now() - last.at < SEARCH_COOLDOWN_MS) return undefined;
+    const found = searchPlayerForManifest(player, movieId);
+    searches.set(movieId, { at: now(), found });
+    return found;
+  };
 }
 
 export interface ManifestWindow {
@@ -161,7 +237,7 @@ export function installManifestCapture(win: ManifestWindow, onManifest: (manifes
   const originalParse = win.JSON.parse;
   win.JSON.parse = function (this: unknown, text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) {
     const value = originalParse.call(this, text, reviver as Parameters<typeof JSON.parse>[1]);
-    if (typeof text === 'string' && text.includes('timedtexttracks')) report(value);
+    if (typeof text === 'string' && (text.includes('timedtexttracks') || text.includes('"textTracks"'))) report(value);
     return value;
   } as typeof JSON.parse;
 
@@ -187,6 +263,9 @@ export function createManifestStore(limit = 10) {
   const byMovie = new Map<string, CapturedManifest>();
   return {
     add(manifest: CapturedManifest) {
+      // Response.json sees many objects; one without files never replaces a capture that has them.
+      const hasFiles = (m: CapturedManifest | undefined) => !!m?.tracks.some((t) => t.urls.length > 0);
+      if (hasFiles(byMovie.get(manifest.movieId)) && !hasFiles(manifest)) return;
       byMovie.delete(manifest.movieId);
       byMovie.set(manifest.movieId, manifest);
       while (byMovie.size > limit) byMovie.delete(byMovie.keys().next().value!);
