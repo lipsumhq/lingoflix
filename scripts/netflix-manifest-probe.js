@@ -57,14 +57,28 @@
       return true;
     }
   };
+  // Plain loops only: Netflix has array/Map types that override slice/map/iteration.
   const childrenOf = (obj) => {
-    if (obj instanceof Map) return [...obj].slice(0, 500).map(([k, v]) => [`get(${short(String(k))})`, v]);
-    if (obj instanceof Set) return [...obj].slice(0, 500).map((v, i) => [`[set ${i}]`, v]);
-    if (Array.isArray(obj)) return obj.slice(0, 500).map((v, i) => [`[${i}]`, v]);
     const out = [];
-    for (const key of Object.getOwnPropertyNames(obj)) {
-      const d = Object.getOwnPropertyDescriptor(obj, key);
-      if (d && 'value' in d) out.push([key, d.value]);
+    if (obj instanceof Map) {
+      Map.prototype.forEach.call(obj, (v, k) => {
+        if (out.length < 500) out.push([`get(${short(call(() => String(k)) ?? '?')})`, v]);
+      });
+    } else if (obj instanceof Set) {
+      Set.prototype.forEach.call(obj, (v) => {
+        if (out.length < 500) out.push([`[set ${out.length}]`, v]);
+      });
+    } else if (Array.isArray(obj)) {
+      const n = Math.min(Number(obj.length) || 0, 500);
+      for (let j = 0; j < n; j++) {
+        const d = Object.getOwnPropertyDescriptor(obj, j);
+        if (d && 'value' in d) out.push([`[${j}]`, d.value]);
+      }
+    } else {
+      for (const key of Object.getOwnPropertyNames(obj)) {
+        const d = Object.getOwnPropertyDescriptor(obj, key);
+        if (d && 'value' in d) out.push([key, d.value]);
+      }
     }
     return out;
   };
@@ -96,7 +110,11 @@
     try {
       if (Array.isArray(value)) {
         s.type = `array(${value.length})`;
-        const objs = value.filter((v) => v && typeof v === 'object');
+        const objs = [];
+        for (let j = 0; j < Math.min(Number(value.length) || 0, 2000); j++) {
+          const d = Object.getOwnPropertyDescriptor(value, j);
+          if (d && d.value && typeof d.value === 'object') objs.push(d.value);
+        }
         if (objs[0]) s.firstKeys = Object.keys(objs[0]).slice(0, 50);
         s.samples = objs.slice(0, 2).map(primitives);
         if (trackId) {
@@ -136,15 +154,19 @@
         continue;
       }
       for (const [key, value] of kids) {
-        const childPath = `${path}.${key}`;
-        if (TEXT_KEY.test(key) && typeof value !== 'function' && !(value && typeof value === 'object' && recorded.has(value))) {
-          if (value && typeof value === 'object') recorded.add(value);
-          const s = summarize(childPath, value, trackId);
-          const isStrong = STRONG_KEY.test(key) || s.ttDownloadables || s.keysEqualToCurrentTrackId?.length;
-          const list = isStrong ? strong : other;
-          if (list.length < 15) list.push(s);
+        try {
+          const childPath = `${path}.${key}`;
+          if (TEXT_KEY.test(key) && typeof value !== 'function' && !(value && typeof value === 'object' && recorded.has(value))) {
+            if (value && typeof value === 'object') recorded.add(value);
+            const s = summarize(childPath, value, trackId);
+            const isStrong = STRONG_KEY.test(key) || s.ttDownloadables || s.keysEqualToCurrentTrackId?.length;
+            const list = isStrong ? strong : other;
+            if (list.length < 15) list.push(s);
+          }
+          if (depth < 16 && queue.length < 1000000 && !skip(value) && !seen.has(value)) queue.push([childPath, value, depth + 1]);
+        } catch {
+          // One odd object must not stop the search.
         }
-        if (depth < 16 && queue.length < 1000000 && !skip(value) && !seen.has(value)) queue.push([childPath, value, depth + 1]);
       }
     }
     return { visited: i, queued: queue.length, strong, other };
