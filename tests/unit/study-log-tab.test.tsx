@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { takePendingSeek } from '@/lib/pending-seek';
 import { StudyLogTab } from '@/entrypoints/options/StudyLogTab';
-import { MIGRATION_KEY, listItems, saveItem } from '@/lib/study-log/items';
+import { ITEM_PREFIX, MIGRATION_KEY, listItems, saveItem } from '@/lib/study-log/items';
 import { listExplanations, saveExplanation } from '@/lib/study-log/store';
 import type { NewExplanation, SaveSuggestion } from '@/lib/study-log/types';
 
@@ -77,6 +78,19 @@ async function rowButton(text: string): Promise<HTMLElement> {
     .find((b) => b.querySelector('[data-item-text]')?.textContent === text);
   if (!button) throw new Error(`No row for ${text}`);
   return button;
+}
+
+/** happy-dom is 1024 px wide; tests pick the layout explicitly. */
+function layout(wide: boolean) {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: wide,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList,
+  );
 }
 
 describe('Study Log tab', () => {
@@ -152,6 +166,20 @@ describe('Study Log tab', () => {
     expect(await listExplanations()).toHaveLength(4);
   });
 
+  it('a deleted episode stays unselected when a Netflix tab saves to it again', async () => {
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(within(await tree()).getByRole('button', { name: 'E3 · Holly, Jolly, 3 saved items' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete episode' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await waitFor(async () => expect(await rowTexts()).toEqual(['Pilot', 'Movie line']));
+    // A Netflix tab saves to that episode again: the page stays on All items instead of jumping back to it.
+    await save(NIGHT, { type: 'idiom', text: 'call it a night', meaning: 'stop for the evening' }, '2026-10-10T11:00:00Z');
+    await waitFor(async () => expect(await rowTexts()).toEqual(['call it a night', 'Pilot', 'Movie line']));
+    expect(within(await tree()).getByRole('button', { name: 'All items, 3 saved items' }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByRole('heading', { name: 'All items' })).toBeTruthy();
+  });
+
   it('deletes a whole season from the tree after confirming', async () => {
     await seed();
     render(<StudyLogTab />);
@@ -217,12 +245,96 @@ describe('Study Log tab', () => {
     expect(await rowTexts()).toEqual(['Fresh line']);
   });
 
-  it('selecting a row marks it as current', async () => {
+  it('selecting a row marks it as current (wide window)', async () => {
+    layout(true);
     await seed();
     render(<StudyLogTab />);
     const pilot = await rowButton('Pilot');
     fireEvent.click(pilot);
     expect(pilot.getAttribute('aria-current')).toBe('true');
+    expect((await rowButton('gonna')).getAttribute('aria-current')).toBeNull();
+  });
+});
+
+describe('Study Log detail view', () => {
+  it('opens next to the list on a wide window; Escape closes it', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('call it a night'));
+    const detail = await screen.findByRole('region', { name: 'call it a night' });
+    expect(within(detail).getByText('stop for the evening')).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Saved items' })).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'call it a night' })).toBeNull());
+  });
+
+  it('replaces the list on a narrow window; Back returns to it', async () => {
+    layout(false);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('Pilot'));
+    expect(await screen.findByRole('region', { name: 'Pilot' })).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Saved items' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('list', { name: 'Saved items' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Pilot' })).toBeNull();
+  });
+
+  it('Open at this moment leaves a pending seek and opens the episode on Netflix', async () => {
+    layout(true);
+    await seed();
+    const create = vi.spyOn(fakeBrowser.tabs, 'create');
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('call it a night'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open at this moment' }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith({ url: 'https://www.netflix.com/watch/80077211' }));
+    expect(await takePendingSeek('80077211')).toBe(1_834_200);
+  });
+
+  it('Delete asks first (Escape cancels and keeps the detail open), then removes only that item', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('gonna'));
+    const detail = await screen.findByRole('region', { name: 'gonna' });
+    fireEvent.click(within(detail).getByRole('button', { name: 'Delete' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete this item?' });
+    expect(within(dialog).getByText('“gonna” will be removed from your Study Log. Its explanation stays in your history.')).toBeTruthy();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('region', { name: 'gonna' })).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole('region', { name: 'gonna' })).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'gonna' })).toBeNull());
+    expect((await listItems()).map((i) => i.text).sort()).toEqual(['Movie line', 'Pilot', 'Where are you going?', 'call it a night']);
+    expect(await listExplanations()).toHaveLength(4);
+  });
+
+  it('switching to another show or episode closes the detail view', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('gonna'));
+    expect(await screen.findByRole('region', { name: 'gonna' })).toBeTruthy();
+    fireEvent.click(within(await tree()).getByRole('button', { name: 'Roma, 1 saved item' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'gonna' })).toBeNull());
+  });
+
+  it('closes when its item is deleted from another tab, and stays closed if the item comes back', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('gonna'));
+    expect(await screen.findByRole('region', { name: 'gonna' })).toBeTruthy();
+    const gonna = (await listItems()).find((i) => i.text === 'gonna')!;
+    await fakeBrowser.storage.local.remove(`${ITEM_PREFIX}${gonna.id}`);
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'gonna' })).toBeNull());
+    // The same item back (as a backup import brings it): the page doesn't reopen it unasked.
+    await fakeBrowser.storage.local.set({ [`${ITEM_PREFIX}${gonna.id}`]: gonna });
+    await waitFor(async () => expect(await rowTexts()).toContain('gonna'));
+    expect(screen.queryByRole('region', { name: 'gonna' })).toBeNull();
     expect((await rowButton('gonna')).getAttribute('aria-current')).toBeNull();
   });
 });

@@ -43,4 +43,16 @@ describe('options page', () => {
     expect(await screen.findByRole('heading', { name: 'Study Log', level: 1 })).toBeTruthy();
     location.hash = '';
   });
+
+  it('gives the Study Log the full width, with tips and support below it', async () => {
+    window.location.hash = '#/study-log';
+    try {
+      render(<App />);
+      const main = await screen.findByRole('main');
+      expect(main.parentElement!.className).toContain('max-w-7xl');
+      expect(main.parentElement!.className).not.toContain('lg:grid-cols-[minmax(0,1fr)_260px]');
+    } finally {
+      window.location.hash = '';
+    }
+  });
 });

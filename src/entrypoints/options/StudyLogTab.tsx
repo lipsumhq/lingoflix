@@ -1,13 +1,17 @@
+import { browser } from '#imports';
 import { BookOpen, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { buttonSecondary, card, iconTile } from '@/components/styles';
+import { useWideLayout } from '@/hooks/useWideLayout';
+import { setPendingSeek } from '@/lib/pending-seek';
 import { filterItems, newestFirst, type TypeFilter } from '@/lib/study-log/filter';
 import { episodeLabel, savedItemsLabel, seasonLabel } from '@/lib/study-log/format';
 import { groupStudyLog, type StudyLogTree as Tree } from '@/lib/study-log/group';
 import { deleteItems, listItems, migrateIfNeeded } from '@/lib/study-log/items';
 import { listExplanations, resetStudyLog, watchStudyLog } from '@/lib/study-log/store';
 import type { SavedItem } from '@/lib/study-log/types';
+import { StudyLogDetail } from './StudyLogDetail';
 import { StudyLogItems } from './StudyLogItems';
 import { StudyLogToolbar } from './StudyLogToolbar';
 import { ALL_ITEMS, StudyLogTree } from './StudyLogTree';
@@ -80,14 +84,21 @@ function selectable(tree: Tree, all: readonly SavedItem[]): Selectable[] {
   return [everything, ...episodes, ...movies];
 }
 
-/** v2 spec §6: the learner's saved words, phrases, idioms and lines. */
-export function StudyLogTab() {
+/** Main spec §5.5 Open at this moment: leave a pending seek, then open the episode on Netflix. */
+async function openInNetflix(item: SavedItem): Promise<void> {
+  await setPendingSeek(item.videoId, item.lineTimeMs);
+  await browser.tabs.create({ url: `https://www.netflix.com/watch/${item.videoId}` });
+}
+
+/** v2 spec §6: the learner's saved words, phrases, idioms and lines, with a detail view. */
+export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (item: SavedItem) => Promise<void> } = {}) {
   const [data, setData] = useState<Loaded | null>(null);
   const [selected, setSelected] = useState<string>(ALL_ITEMS);
   const [type, setType] = useState<TypeFilter>('all');
   const [query, setQuery] = useState('');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingDelete | null>(null);
+  const wide = useWideLayout();
 
   useEffect(() => {
     let active = true;
@@ -111,14 +122,52 @@ export function StudyLogTab() {
   const nodes = useMemo(() => selectable(tree, items), [tree, items]);
   const current = nodes.find((n) => n.key === selected) ?? nodes[0]!;
   const visible = useMemo(() => filterItems(current.items, { type, query }), [current, type, query]);
+  // Gone when it was deleted (here or from another tab).
+  const selectedItem = items.find((i) => i.id === selectedItemId) ?? null;
+  // A selected node or item that's gone is dropped from the selection, not only hidden: a later reload that brings
+  // it back (a Netflix tab saving to that episode again, an import) must not jump the page to it unasked. Adjusting
+  // state during render: React re-renders right away, before anything is shown.
+  if (current.key !== selected) setSelected(ALL_ITEMS);
+  if (selectedItemId !== null && selectedItem === null) setSelectedItemId(null);
+
+  // v2 spec §6.1: Escape closes the detail view. A confirmation dialog handles its own Escape first.
+  useEffect(() => {
+    if (!selectedItem || pending) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedItemId(null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [selectedItem, pending]);
 
   const confirmDelete = (title: string, body: string, ids: string[]) => setPending({ title, body, run: () => deleteItems(ids) });
   const clearFilters = () => {
     setType('all');
     setQuery('');
   };
+  const closeDetail = () => setSelectedItemId(null);
+  const askDeleteItem = (item: SavedItem) =>
+    setPending({
+      title: 'Delete this item?',
+      body: `“${item.text}” will be removed from your Study Log. Its explanation stays in your history.`,
+      run: async () => {
+        await deleteItems([item.id]);
+        setSelectedItemId((id) => (id === item.id ? null : id));
+      },
+    });
 
   if (data === null) return <p className="text-sm font-semibold text-mute">Loading…</p>;
+
+  const detail = selectedItem && (
+    <StudyLogDetail
+      key={selectedItem.id}
+      item={selectedItem}
+      narrow={!wide}
+      onClose={closeDetail}
+      onDelete={askDeleteItem}
+      onOpenAtMoment={(item) => void openAtMoment(item)}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -157,7 +206,11 @@ export function StudyLogTab() {
           </div>
         </section>
       ) : (
-        <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
+        <div
+          className={`grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] ${
+            detail && wide ? 'min-[1100px]:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)]' : ''
+          }`}
+        >
           <StudyLogTree
             tree={tree}
             selected={current.key}
@@ -180,26 +233,31 @@ export function StudyLogTab() {
               )
             }
           />
-          <div className="flex min-w-0 flex-col gap-4">
-            <StudyLogToolbar type={type} onTypeChange={setType} query={query} onQueryChange={setQuery} />
-            <StudyLogItems
-              heading={current.heading}
-              subheading={current.subheading}
-              items={visible}
-              scope={current.scope}
-              selectedId={selectedItemId}
-              onSelectItem={(item) => setSelectedItemId(item.id)}
-              deleteLabel={current.deleteLabel}
-              onDeleteAll={() =>
-                confirmDelete(
-                  `${current.deleteLabel}?`,
-                  `All ${savedItemsLabel(current.items.length)} from ${current.place} will be removed. ${KEEP_HISTORY}`,
-                  current.items.map((i) => i.id),
-                )
-              }
-              onClearFilters={clearFilters}
-            />
-          </div>
+          {detail && !wide ? (
+            detail
+          ) : (
+            <div className="flex min-w-0 flex-col gap-4">
+              <StudyLogToolbar type={type} onTypeChange={setType} query={query} onQueryChange={setQuery} />
+              <StudyLogItems
+                heading={current.heading}
+                subheading={current.subheading}
+                items={visible}
+                scope={current.scope}
+                selectedId={selectedItemId}
+                onSelectItem={(item) => setSelectedItemId(item.id)}
+                deleteLabel={current.deleteLabel}
+                onDeleteAll={() =>
+                  confirmDelete(
+                    `${current.deleteLabel}?`,
+                    `All ${savedItemsLabel(current.items.length)} from ${current.place} will be removed. ${KEEP_HISTORY}`,
+                    current.items.map((i) => i.id),
+                  )
+                }
+                onClearFilters={clearFilters}
+              />
+            </div>
+          )}
+          {detail && wide && detail}
         </div>
       )}
 

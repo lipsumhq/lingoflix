@@ -24,6 +24,9 @@ export function App() {
   const [tab, setTab] = useState<TabId>(tabFromHash);
   const { settings } = useSettings();
   useTheme(settings?.theme);
+  // v2 spec §6.1: the Study Log needs room for tree, list and detail; tips and support go below it.
+  const fullWidth = tab === 'study-log';
+  const width = fullWidth ? 'max-w-7xl' : 'max-w-5xl';
 
   useEffect(() => {
     const onHashChange = () => setTab(tabFromHash());
@@ -34,7 +37,7 @@ export function App() {
   return (
     <div className="min-h-screen">
       <header className="border-b-2 border-soft">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
+        <div className={`mx-auto flex ${width} flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4`}>
           <Logo large />
           <nav aria-label="Sections" className="flex gap-1.5">
             {TABS.map((t) => {
@@ -58,13 +61,13 @@ export function App() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-5xl gap-6 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className={`mx-auto grid ${width} gap-6 px-6 py-8 ${fullWidth ? '' : 'lg:grid-cols-[minmax(0,1fr)_260px]'}`}>
         <main className="flex flex-col gap-5">
           {tab === 'settings' && <SettingsTab />}
           {tab === 'study-log' && <StudyLogTab />}
           <p className="text-xs font-semibold text-mute">Not affiliated with or endorsed by Netflix.</p>
         </main>
-        <aside aria-label="Tips and support" className="flex flex-col gap-4 lg:pt-[74px]">
+        <aside aria-label="Tips and support" className={fullWidth ? 'grid gap-4 md:grid-cols-2' : 'flex flex-col gap-4 lg:pt-[74px]'}>
           <TipCard />
           <DonationCard />
         </aside>

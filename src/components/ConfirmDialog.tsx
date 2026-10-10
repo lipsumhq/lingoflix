@@ -20,7 +20,10 @@ export function ConfirmDialog({ title, body, confirmLabel = 'Delete', onConfirm,
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
       onKeyDown={(e) => {
-        if (e.key === 'Escape') onCancel();
+        if (e.key !== 'Escape') return;
+        // The dialog owns this Escape: the page behind it (e.g. the Study Log detail view) must not also react.
+        e.stopPropagation();
+        onCancel();
       }}
     >
       <div role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={bodyId} className={`${card} w-full max-w-sm p-5`}>
