@@ -1,8 +1,10 @@
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import { createBridgeClient, type BridgeClient } from '@/lib/bridge/client';
-import { END_GUARD_MS, clampTime, createPlayerMethods, findPlayer, type NetflixPlayer } from '@/lib/bridge/player';
-import { BRIDGE_REQUEST_EVENT, BRIDGE_RESPONSE_EVENT, BridgeError, decode, encode } from '@/lib/bridge/protocol';
+import { END_GUARD_MS, clampTime, createPlayerMethods, findPlayer, metadataVideoFrom, type NetflixPlayer } from '@/lib/bridge/player';
+import { BRIDGE_REQUEST_EVENT, BRIDGE_RESPONSE_EVENT, BridgeError, decode, encode, parseSubtitleSource, parseTitleInfo } from '@/lib/bridge/protocol';
 import { serveBridge } from '@/lib/bridge/server';
+import { createManifestStore } from '@/lib/netflix/manifest';
 
 /**
  * `time` and `duration` are in the clock `seek()` takes (the episode itself). Netflix can play a
@@ -10,6 +12,7 @@ import { serveBridge } from '@/lib/bridge/server';
  */
 class FakePlayer implements NetflixPlayer {
   leadInMs = 0;
+  textTrack: unknown = undefined;
   constructor(
     public time = 60_000,
     public duration = 1_200_000,
@@ -39,6 +42,9 @@ class FakePlayer implements NetflixPlayer {
   }
   getMovieId() {
     return this.movieId;
+  }
+  getTimedTextTrack() {
+    return this.textTrack;
   }
 }
 
@@ -171,6 +177,7 @@ describe('bridge round trip', () => {
       durationMs: 1_000_000,
       paused: true,
       videoId: '81091396',
+      textTrack: null,
     });
   });
 
@@ -320,5 +327,113 @@ describe('callSync', () => {
     cleanups.push(() => client.dispose());
     const res = client.callSync('getState');
     expect(!res.ok && res.error.code).toBe('timeout');
+  });
+});
+
+describe('subtitle source and title (Plan 2)', () => {
+  const EN = { trackId: 'T:1:0;1;en;1;1;0;', bcp47: 'en', isImageBased: false, isNoneTrack: false };
+
+  function connectWithSources(player: FakePlayer, opts: { metadata?: unknown; doc?: Document | null } = {}) {
+    const manifests = createManifestStore();
+    manifests.add({
+      movieId: '81091396',
+      tracks: [
+        { ids: [EN.trackId], language: 'en', isImageBased: false, isNone: false, urls: ['https://cdn.example/en.dfxp'] },
+        { ids: ['T:ja'], language: 'ja', isImageBased: true, isNone: false, urls: [] },
+      ],
+    });
+    const target = new EventTarget();
+    const stop = serveBridge(
+      target,
+      createPlayerMethods(
+        () => player,
+        () => '81091396',
+        {
+          getManifest: manifests.get,
+          getMetadataVideo: () => opts.metadata,
+          getDocument: () => opts.doc ?? null,
+        },
+      ),
+    );
+    const client = createBridgeClient(target, 50);
+    cleanups.push(stop, () => client.dispose());
+    return client;
+  }
+
+  it('reports the current text track in getState', async () => {
+    const player = new FakePlayer();
+    player.textTrack = EN;
+    const client = connectWithSources(player);
+    expect((await client.call('getState')).textTrack).toEqual({
+      trackId: EN.trackId,
+      language: 'en',
+      isImageBased: false,
+      isNone: false,
+    });
+  });
+
+  it('gives the file URL of the track being shown', async () => {
+    const player = new FakePlayer();
+    player.textTrack = EN;
+    expect(await connectWithSources(player).call('getSubtitleSource')).toEqual({
+      videoId: '81091396',
+      trackId: EN.trackId,
+      language: 'en',
+      url: 'https://cdn.example/en.dfxp',
+    });
+  });
+
+  it('no source for subtitles off, image-based subtitles, or an uncaptured track', async () => {
+    for (const textTrack of [
+      { ...EN, isNoneTrack: true },
+      { trackId: 'T:ja', bcp47: 'ja', isImageBased: true },
+      { trackId: 'T:unknown', bcp47: 'fr' },
+      undefined,
+    ]) {
+      const player = new FakePlayer();
+      player.textTrack = textTrack;
+      expect(await connectWithSources(player).call('getSubtitleSource')).toBeNull();
+    }
+  });
+
+  it('title comes from the metadata, else the player UI', async () => {
+    const show = { title: 'Show', type: 'show', id: 1, seasons: [{ seq: 2, episodes: [{ id: 81091396, seq: 5, title: 'Ep' }] }] };
+    expect(await connectWithSources(new FakePlayer(), { metadata: show }).call('getTitle')).toMatchObject({
+      seriesTitle: 'Show',
+      seasonNumber: 2,
+      episodeNumber: 5,
+    });
+    const doc = document.implementation.createHTMLDocument('x');
+    doc.body.innerHTML = '<div data-uia="video-title">A Movie</div>';
+    expect(await connectWithSources(new FakePlayer(), { doc }).call('getTitle')).toMatchObject({ kind: 'movie', seriesTitle: 'A Movie' });
+    expect(await connectWithSources(new FakePlayer()).call('getTitle')).toBeNull();
+  });
+
+  it('reads metadata at videoMetadata[id]._metadataObject.video', () => {
+    const video = { title: 'T' };
+    const netflix = {
+      appContext: { state: { playerApp: { getState: () => ({ videoPlayer: { videoMetadata: { 42: { _metadataObject: { video } } } } }) } } },
+    };
+    expect(metadataVideoFrom(netflix, '42')).toBe(video);
+    expect(metadataVideoFrom({}, '42')).toBeUndefined();
+    expect(metadataVideoFrom({ appContext: { state: { playerApp: { getState: () => { throw new Error('x'); } } } } }, '42')).toBeUndefined();
+  });
+});
+
+describe('validating what comes back from the page', () => {
+  it('accepts only a well-formed https subtitle source', () => {
+    const ok = { videoId: '1', trackId: 't', language: 'en', url: 'https://cdn.example/a' };
+    expect(parseSubtitleSource(ok)).toEqual(ok);
+    expect(parseSubtitleSource({ ...ok, url: 'http://cdn.example/a' })).toBeNull();
+    expect(parseSubtitleSource({ ...ok, videoId: 1 })).toBeNull();
+    expect(parseSubtitleSource(null)).toBeNull();
+  });
+
+  it('accepts only a well-formed title', () => {
+    const ok = { videoId: '1', kind: 'episode', seriesId: null, seriesTitle: 'S', seasonNumber: 1, episodeNumber: 2, episodeTitle: null };
+    expect(parseTitleInfo(ok)).toEqual(ok);
+    expect(parseTitleInfo({ ...ok, kind: 'podcast' })).toBeNull();
+    expect(parseTitleInfo({ ...ok, seriesTitle: '' })).toBeNull();
+    expect(parseTitleInfo({ ...ok, seasonNumber: '1' })).toBeNull();
   });
 });

@@ -1,4 +1,6 @@
-import { BridgeError, type BridgeMethods, type PlayerState } from './protocol';
+import type { CapturedManifest } from '@/lib/netflix/manifest';
+import { titleFromDom, titleFromMetadata } from '@/lib/netflix/title';
+import { BridgeError, type BridgeMethods, type PlayerState, type TextTrackInfo } from './protocol';
 
 /**
  * The part of Netflix's internal player LingoFlix uses (docs/netflix-internals.md, row 2). Times are ms.
@@ -14,6 +16,7 @@ export interface NetflixPlayer {
   getDuration(): number;
   isPaused(): boolean;
   getMovieId?(): number | string | undefined;
+  getTimedTextTrack?(): unknown;
 }
 
 const REQUIRED_PLAYER_METHODS = [
@@ -98,7 +101,56 @@ function readyTimes(p: NetflixPlayer): { currentMs: number; durationMs: number }
   return { currentMs, durationMs };
 }
 
-export function createPlayerMethods(getPlayer: () => NetflixPlayer, getVideoId: () => string | null): BridgeMethods {
+/** Where the bridge reads subtitle files and titles (wired to Netflix in netflix-bridge.content.ts). */
+export interface PlayerSources {
+  getManifest(movieId: string): CapturedManifest | undefined;
+  getMetadataVideo(videoId: string): unknown;
+  getDocument(): Document | null;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+interface MetadataGlobal {
+  appContext?: {
+    state?: {
+      playerApp?: {
+        getState?(): { videoPlayer?: { videoMetadata?: Record<string, { _metadataObject?: { video?: unknown } } | undefined> } };
+      };
+    };
+  };
+}
+
+/** `playerApp.getState().videoPlayer.videoMetadata[videoId]._metadataObject.video` (docs/netflix-internals.md row 4). */
+export function metadataVideoFrom(netflix: unknown, videoId: string): unknown {
+  try {
+    return (netflix as MetadataGlobal | undefined)?.appContext?.state?.playerApp?.getState?.()?.videoPlayer?.videoMetadata?.[videoId]
+      ?._metadataObject?.video;
+  } catch {
+    return undefined;
+  }
+}
+
+function readTextTrack(p: NetflixPlayer): TextTrackInfo | null {
+  try {
+    const t = p.getTimedTextTrack?.();
+    if (!isRecord(t) || (typeof t.trackId !== 'string' && typeof t.trackId !== 'number')) return null;
+    return {
+      trackId: String(t.trackId),
+      language: typeof t.bcp47 === 'string' ? t.bcp47 : '',
+      isImageBased: t.isImageBased === true,
+      isNone: t.isNoneTrack === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createPlayerMethods(
+  getPlayer: () => NetflixPlayer,
+  getVideoId: () => string | null,
+  sources?: PlayerSources,
+): BridgeMethods {
   return {
     seekBy(deltaMs) {
       requireFinite(deltaMs, 'deltaMs');
@@ -126,7 +178,23 @@ export function createPlayerMethods(getPlayer: () => NetflixPlayer, getVideoId: 
         durationMs,
         paused: p.isPaused(),
         videoId: getVideoId(),
+        textTrack: readTextTrack(p),
       };
+    },
+    getSubtitleSource() {
+      const videoId = getVideoId();
+      const track = readTextTrack(getPlayer());
+      if (!videoId || !track || track.isNone || track.isImageBased || !sources) return null;
+      const captured = sources.getManifest(videoId)?.tracks.find((t) => t.ids.includes(track.trackId));
+      const url = captured?.urls[0];
+      if (!captured || !url) return null;
+      return { videoId, trackId: track.trackId, language: track.language || captured.language, url };
+    },
+    getTitle() {
+      const videoId = getVideoId();
+      if (!videoId || !sources) return null;
+      const doc = sources.getDocument();
+      return titleFromMetadata(sources.getMetadataVideo(videoId), videoId) ?? (doc ? titleFromDom(doc, videoId) : null);
     },
   };
 }
