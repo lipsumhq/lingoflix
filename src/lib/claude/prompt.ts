@@ -1,7 +1,7 @@
 import { getExplanationLanguage } from '@/lib/languages';
 import type { TitleInfo } from '@/lib/netflix/title';
 import type { CardSections } from '@/lib/settings';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 import type { DialogueContext } from '@/lib/subtitles/context';
 import { normalizeLine } from '@/lib/subtitles/cue';
 
@@ -80,7 +80,7 @@ export function buildUserMessage(request: Pick<ExplainRequest, 'phrase' | 'conte
   ].join('\n');
 }
 
-const titleOf = (entry: StudyLogEntry): TitleInfo => ({
+const titleOf = (entry: Explanation): TitleInfo => ({
   videoId: entry.videoId,
   kind: entry.kind,
   seriesId: entry.seriesId,
@@ -91,7 +91,7 @@ const titleOf = (entry: StudyLogEntry): TitleInfo => ({
 });
 
 /** Spec §7.3: [user: initial request, assistant: explanation, user: q1, assistant: a1, …, user: new question]. */
-export function buildFollowUpMessages(entry: StudyLogEntry, question: string): ChatMessage[] {
+export function buildFollowUpMessages(entry: Explanation, question: string): ChatMessage[] {
   const messages: ChatMessage[] = [
     { role: 'user', content: buildUserMessage({ phrase: entry.phrase, context: entry.context, title: titleOf(entry) }) },
     { role: 'assistant', content: entry.response },

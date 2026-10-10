@@ -1,5 +1,5 @@
 import { CLAUDE_IDLE_TIMEOUT_MS, CLAUDE_MAX_TOKENS, CLAUDE_MODEL } from '@/lib/config';
-import type { FollowUp, NewStudyLogEntry, StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation, FollowUp, NewExplanation } from '@/lib/study-log/types';
 import type { ClaudeClient } from './client';
 import { toExplainError } from './errors';
 import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, type ChatMessage, type ExplainRequest } from './prompt';
@@ -15,9 +15,9 @@ export interface ExplainPort {
 export interface ExplainServiceDeps {
   getApiKey(): Promise<string | null>;
   createClient(apiKey: string): ClaudeClient;
-  saveExplanation(fields: NewStudyLogEntry): Promise<StudyLogEntry>;
-  getEntry(id: string): Promise<StudyLogEntry | null>;
-  appendFollowUp(id: string, followUp: FollowUp): Promise<StudyLogEntry | null>;
+  saveExplanation(fields: NewExplanation): Promise<Explanation>;
+  getExplanation(id: string): Promise<Explanation | null>;
+  appendFollowUp(id: string, followUp: FollowUp): Promise<Explanation | null>;
   idleTimeoutMs?: number;
 }
 
@@ -25,7 +25,7 @@ const UNREADABLE = 'LingoFlix sent a request it could not read.';
 const ENTRY_GONE = 'This explanation is no longer in your Study Log.';
 const EMPTY_ANSWER = 'Claude returned an empty answer.';
 
-function entryFields(request: ExplainRequest, response: string): NewStudyLogEntry {
+function explanationFields(request: ExplainRequest, response: string): NewExplanation {
   const title = request.title;
   return {
     phrase: request.phrase,
@@ -41,6 +41,7 @@ function entryFields(request: ExplainRequest, response: string): NewStudyLogEntr
     context: request.context,
     explanationLanguage: request.language,
     model: CLAUDE_MODEL,
+    suggestions: [],
   };
 }
 
@@ -93,18 +94,18 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
 
     let system: string;
     let messages: ChatMessage[];
-    let finish: (text: string) => Promise<StudyLogEntry | null>;
+    let finish: (text: string) => Promise<Explanation | null>;
     if (message.type === 'start') {
       const { request } = message;
       system = buildSystemPrompt(request.language, request.sections);
       messages = [{ role: 'user', content: buildUserMessage(request) }];
-      finish = (text) => deps.saveExplanation(entryFields(request, text));
+      finish = (text) => deps.saveExplanation(explanationFields(request, text));
     } else {
-      const entry = await deps.getEntry(message.entryId);
-      if (!entry) return fail('api', ENTRY_GONE);
-      system = buildSystemPrompt(entry.explanationLanguage, message.sections, true);
-      messages = buildFollowUpMessages(entry, message.question);
-      finish = (text) => deps.appendFollowUp(entry.id, { question: message.question.trim(), answer: text });
+      const explanation = await deps.getExplanation(message.entryId);
+      if (!explanation) return fail('api', ENTRY_GONE);
+      system = buildSystemPrompt(explanation.explanationLanguage, message.sections, true);
+      messages = buildFollowUpMessages(explanation, message.question);
+      finish = (text) => deps.appendFollowUp(explanation.id, { question: message.question.trim(), answer: text });
     }
 
     armIdleTimer();
@@ -120,9 +121,9 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
       clearTimeout(idleTimer);
       if (disconnected) return; // the card closed: nothing is saved
       if (!text.trim()) return fail('api', EMPTY_ANSWER);
-      const entry = await finish(text);
-      if (!entry) return fail('api', ENTRY_GONE);
-      post({ type: 'done', entry });
+      const saved = await finish(text);
+      if (!saved) return fail('api', ENTRY_GONE);
+      post({ type: 'done', entry: saved });
     } catch (err) {
       clearTimeout(idleTimer);
       if (disconnected) return;

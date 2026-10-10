@@ -1,7 +1,7 @@
 import { parseTitleInfo } from '@/lib/bridge/protocol';
 import { isExplanationLanguage } from '@/lib/languages';
 import { CARD_SECTION_IDS, type CardSections } from '@/lib/settings';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 import type { ExplainRequest } from './prompt';
 
 /** One Port per request (spec §6.3); disconnecting aborts it. */
@@ -27,7 +27,7 @@ export const ERROR_COPY: Record<ExplainErrorCode, string> = {
 
 export type ExplainServerMessage =
   | { type: 'delta'; text: string }
-  | { type: 'done'; entry: StudyLogEntry }
+  | { type: 'done'; entry: Explanation }
   | { type: 'error'; code: ExplainErrorCode; message: string };
 
 const MAX_LINE_CHARS = 2000;

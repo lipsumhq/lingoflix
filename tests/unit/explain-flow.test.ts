@@ -6,7 +6,7 @@ import { placeCard } from '@/entrypoints/netflix.content/overlay/positioning';
 import { createStore } from '@/entrypoints/netflix.content/overlay/store';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 import type { ObservedLine } from '@/lib/subtitles/history';
 
 function fakePort() {
@@ -106,9 +106,9 @@ const SAVED = {
   phrase: LINE.text,
   response: '## 의미\n잘 시간.',
   followUps: [{ question: 'Formal?', answer: 'No.' }],
-} as StudyLogEntry;
+} as Explanation;
 
-function setupExplain(over: { entry?: StudyLogEntry | null; imageBased?: boolean; line?: ObservedLine | null } = {}) {
+function setupExplain(over: { entry?: Explanation | null; imageBased?: boolean; line?: ObservedLine | null } = {}) {
   const store = createStore<CardState | null>(null);
   const ports: ReturnType<typeof fakePort>[] = [];
   const connect: Connect = () => {

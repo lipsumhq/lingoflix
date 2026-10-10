@@ -1,72 +1,75 @@
 import { browser } from '#imports';
 import { normalizeLine } from '@/lib/subtitles/cue';
-import { isStudyLogEntry, type FollowUp, type NewStudyLogEntry, type StudyLogEntry } from './types';
+import { toExplanation, type Explanation, type FollowUp, type NewExplanation } from './types';
 
-/** `log:{id}` holds an entry (spec §5.5). */
-export const ENTRY_PREFIX = 'log:';
-/** `logkey:{videoId}|{language}|{normalized line}` holds the id of that line's entry. */
-export const INDEX_PREFIX = 'logkey:';
+/** `log:{id}` holds an explanation (v2 spec §3.1). */
+export const EXPLANATION_PREFIX = 'log:';
+/** `logkey:{videoId}|{language}|{normalized line}` holds the id of that line's explanation. */
+export const EXPLANATION_INDEX_PREFIX = 'logkey:';
 
-const entryKey = (id: string) => `${ENTRY_PREFIX}${id}`;
+const explanationKey = (id: string) => `${EXPLANATION_PREFIX}${id}`;
 
-export function indexKey(videoId: string, language: string, phrase: string): string {
-  return `${INDEX_PREFIX}${videoId}|${language}|${normalizeLine(phrase)}`;
+export function explanationIndexKey(videoId: string, language: string, phrase: string): string {
+  return `${EXPLANATION_INDEX_PREFIX}${videoId}|${language}|${normalizeLine(phrase)}`;
 }
 
-const indexKeyOf = (e: Pick<StudyLogEntry, 'videoId' | 'explanationLanguage' | 'phrase'>) =>
-  indexKey(e.videoId, e.explanationLanguage, e.phrase);
+const indexKeyOf = (e: Pick<Explanation, 'videoId' | 'explanationLanguage' | 'phrase'>) =>
+  explanationIndexKey(e.videoId, e.explanationLanguage, e.phrase);
 
-export async function getEntry(id: string): Promise<StudyLogEntry | null> {
-  const key = entryKey(id);
-  const value = (await browser.storage.local.get(key))[key];
-  return isStudyLogEntry(value) ? value : null;
+const isExplanation = (value: Explanation | null): value is Explanation => value !== null;
+
+export async function getExplanation(id: string): Promise<Explanation | null> {
+  const key = explanationKey(id);
+  return toExplanation((await browser.storage.local.get(key))[key]);
 }
 
-/** Spec §5.3 step 3.1: the saved explanation of this line, in this language, in this video. */
-export async function findEntry(videoId: string, language: string, phrase: string): Promise<StudyLogEntry | null> {
-  const key = indexKey(videoId, language, phrase);
+/** Main spec §5.3 step 3.1: the explanation of this line, in this language, in this video. */
+export async function findExplanation(videoId: string, language: string, phrase: string): Promise<Explanation | null> {
+  const key = explanationIndexKey(videoId, language, phrase);
   const id = (await browser.storage.local.get(key))[key];
-  return typeof id === 'string' ? getEntry(id) : null;
+  return typeof id === 'string' ? getExplanation(id) : null;
 }
 
-export async function listEntries(): Promise<StudyLogEntry[]> {
+export async function listExplanations(): Promise<Explanation[]> {
   const all = await browser.storage.local.get(null);
   return Object.entries(all)
-    .filter(([key]) => key.startsWith(ENTRY_PREFIX))
-    .map(([, value]) => value)
-    .filter(isStudyLogEntry);
+    .filter(([key]) => key.startsWith(EXPLANATION_PREFIX))
+    .map(([, value]) => toExplanation(value))
+    .filter(isExplanation);
 }
 
 /**
- * Saves a finished explanation. Saving a line that already has an entry replaces its response and clears
- * its follow-ups (they referred to the old response) but keeps its id and savedAt — that is Regenerate.
+ * Saves a finished explanation. Saving a line that already has one replaces its response and suggestions and
+ * clears its follow-ups (they referred to the old response) but keeps its id and savedAt: that is Regenerate.
  */
 export async function saveExplanation(
-  fields: NewStudyLogEntry,
+  fields: NewExplanation,
   now: Date = new Date(),
   newId: () => string = () => crypto.randomUUID(),
-): Promise<StudyLogEntry> {
-  const existing = await findEntry(fields.videoId, fields.explanationLanguage, fields.phrase);
+): Promise<Explanation> {
+  const existing = await findExplanation(fields.videoId, fields.explanationLanguage, fields.phrase);
   const stamp = now.toISOString();
-  const entry: StudyLogEntry = existing
+  const explanation: Explanation = existing
     ? { ...existing, ...fields, followUps: [], updatedAt: stamp }
     : { ...fields, id: newId(), followUps: [], savedAt: stamp, updatedAt: stamp };
-  await browser.storage.local.set({ [entryKey(entry.id)]: entry, [indexKeyOf(entry)]: entry.id });
-  return entry;
+  await browser.storage.local.set({ [explanationKey(explanation.id)]: explanation, [indexKeyOf(explanation)]: explanation.id });
+  return explanation;
 }
 
-export async function appendFollowUp(id: string, followUp: FollowUp, now: Date = new Date()): Promise<StudyLogEntry | null> {
-  const entry = await getEntry(id);
-  if (!entry) return null;
-  const next: StudyLogEntry = { ...entry, followUps: [...entry.followUps, followUp], updatedAt: now.toISOString() };
-  await browser.storage.local.set({ [entryKey(id)]: next });
+export async function appendFollowUp(id: string, followUp: FollowUp, now: Date = new Date()): Promise<Explanation | null> {
+  const explanation = await getExplanation(id);
+  if (!explanation) return null;
+  const next: Explanation = { ...explanation, followUps: [...explanation.followUps, followUp], updatedAt: now.toISOString() };
+  await browser.storage.local.set({ [explanationKey(id)]: next });
   return next;
 }
 
-export async function deleteEntries(ids: readonly string[]): Promise<void> {
+export async function deleteExplanations(ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return;
-  const keys = ids.map(entryKey);
-  const stored = Object.values(await browser.storage.local.get(keys)).filter(isStudyLogEntry);
+  const keys = ids.map(explanationKey);
+  const stored = Object.values(await browser.storage.local.get(keys))
+    .map((value) => toExplanation(value))
+    .filter(isExplanation);
   const indexes = await browser.storage.local.get(stored.map(indexKeyOf));
   const ownIndexes = Object.entries(indexes)
     .filter(([, id]) => typeof id === 'string' && ids.includes(id))
@@ -74,18 +77,18 @@ export async function deleteEntries(ids: readonly string[]): Promise<void> {
   await browser.storage.local.remove([...keys, ...ownIndexes]);
 }
 
-/** Spec §5.5 Reset all: every entry and lookup key, nothing else (the API key stays). */
+/** Main spec §5.5 Reset all: every explanation and lookup key, nothing else (the API key stays). */
 export async function resetStudyLog(): Promise<void> {
   const keys = Object.keys(await browser.storage.local.get(null)).filter(
-    (key) => key.startsWith(ENTRY_PREFIX) || key.startsWith(INDEX_PREFIX),
+    (key) => key.startsWith(EXPLANATION_PREFIX) || key.startsWith(EXPLANATION_INDEX_PREFIX),
   );
   if (keys.length > 0) await browser.storage.local.remove(keys);
 }
 
-/** Calls back whenever any entry is added, changed, or removed (e.g. from a Netflix tab). */
+/** Calls back whenever any explanation is added, changed, or removed (e.g. from a Netflix tab). */
 export function watchStudyLog(callback: () => void): () => void {
   const listener = (changes: Record<string, unknown>, area: string) => {
-    if (area === 'local' && Object.keys(changes).some((key) => key.startsWith(ENTRY_PREFIX))) callback();
+    if (area === 'local' && Object.keys(changes).some((key) => key.startsWith(EXPLANATION_PREFIX))) callback();
   };
   browser.storage.onChanged.addListener(listener);
   return () => browser.storage.onChanged.removeListener(listener);

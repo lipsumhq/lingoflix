@@ -7,7 +7,7 @@ import type { ExplainRequest } from '@/lib/claude/prompt';
 import type { ExplainServerMessage } from '@/lib/claude/protocol';
 import { CLAUDE_MODEL } from '@/lib/config';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
-import { appendFollowUp, findEntry, getEntry, listEntries, saveExplanation } from '@/lib/study-log/store';
+import { appendFollowUp, findExplanation, getExplanation, listExplanations, saveExplanation } from '@/lib/study-log/store';
 
 beforeEach(() => fakeBrowser.reset());
 
@@ -68,7 +68,7 @@ function deps(client: ClaudeClient, over: Partial<ExplainServiceDeps> = {}): Exp
     getApiKey: async () => 'sk-ant-test-key-0000',
     createClient: () => client,
     saveExplanation: (fields) => saveExplanation(fields),
-    getEntry,
+    getExplanation,
     appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
     ...over,
   };
@@ -97,7 +97,7 @@ describe('explain service', () => {
       model: CLAUDE_MODEL,
       context: REQUEST.context,
     });
-    expect(await findEntry('80077211', 'ko', REQUEST.phrase)).toEqual(done.entry);
+    expect(await findExplanation('80077211', 'ko', REQUEST.phrase)).toEqual(done.entry);
     expect(calls[0]).toMatchObject({ model: 'claude-sonnet-5-5', maxTokens: 1024 });
     expect(calls[0]!.system).toContain('Korean (한국어)');
     expect(calls[0]!.messages).toEqual([{ role: 'user', content: expect.stringContaining(">>> I'm gonna call it a night.") }]);
@@ -136,7 +136,7 @@ describe('explain service', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(signals[0]!.aborted).toBe(true);
     expect(sent).toEqual([]);
-    expect(await listEntries()).toEqual([]);
+    expect(await listExplanations()).toEqual([]);
   });
 
   it("a silent stream times out as Couldn't reach Claude", async () => {
@@ -145,7 +145,7 @@ describe('explain service', () => {
     serveExplainPort(port, deps(client, { idleTimeoutMs: 20 }));
     send({ type: 'start', request: REQUEST });
     await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach Claude" }]));
-    expect(await listEntries()).toEqual([]);
+    expect(await listExplanations()).toEqual([]);
   });
 
   it('maps API errors to card states and saves nothing', async () => {
@@ -155,7 +155,7 @@ describe('explain service', () => {
     serveExplainPort(port, deps(client));
     send({ type: 'start', request: REQUEST });
     await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'bad-key', message: 'Your API key was rejected' }]));
-    expect(await listEntries()).toEqual([]);
+    expect(await listExplanations()).toEqual([]);
   });
 
   it('an empty answer is an error, not an entry', async () => {
@@ -164,7 +164,7 @@ describe('explain service', () => {
     serveExplainPort(port, deps(client));
     send({ type: 'start', request: REQUEST });
     await vi.waitFor(() => expect(sent.at(-1)).toEqual({ type: 'error', code: 'api', message: 'Claude returned an empty answer.' }));
-    expect(await listEntries()).toEqual([]);
+    expect(await listExplanations()).toEqual([]);
   });
 
   it('follow-up: replays the conversation and appends the Q&A to the entry', async () => {
@@ -182,6 +182,7 @@ describe('explain service', () => {
       context: { before: [], after: [] },
       explanationLanguage: 'ko',
       model: CLAUDE_MODEL,
+      suggestions: [],
     });
     const { client, calls } = fakeClient({ deltas: ['아니요.'] });
     const { port, sent, send } = fakePort();
@@ -190,7 +191,7 @@ describe('explain service', () => {
     await vi.waitFor(() => expect(sent.at(-1)?.type).toBe('done'));
     expect(calls[0]!.system).toContain('follow-up question');
     expect(calls[0]!.messages.map((m) => m.content).slice(1)).toEqual(['Explanation', 'Is it formal?']);
-    expect((await getEntry(saved.id))?.followUps).toEqual([{ question: 'Is it formal?', answer: '아니요.' }]);
+    expect((await getExplanation(saved.id))?.followUps).toEqual([{ question: 'Is it formal?', answer: '아니요.' }]);
   });
 
   it('follow-up on a deleted entry, malformed messages, and second messages are handled', async () => {

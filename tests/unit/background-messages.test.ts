@@ -5,7 +5,7 @@ import { getApiKey, maskApiKey, removeApiKey, setApiKey } from '@/lib/api-key';
 import { createMessageHandler, type MessageHandlerDeps } from '@/lib/background/message-handler';
 import type { ClaudeClient } from '@/lib/claude/client';
 import { PENDING_SEEK_MAX_AGE_MS, setPendingSeek, takePendingSeek } from '@/lib/pending-seek';
-import { findEntry, saveExplanation } from '@/lib/study-log/store';
+import { findExplanation, saveExplanation } from '@/lib/study-log/store';
 
 beforeEach(() => fakeBrowser.reset());
 
@@ -21,7 +21,7 @@ function handlerWith(checkKey: ClaudeClient['checkKey'] = async () => {}, over: 
     setApiKey,
     removeApiKey,
     createClient,
-    findEntry,
+    findExplanation,
     takePendingSeek: (videoId) => takePendingSeek(videoId),
     openOptions,
     ...over,
@@ -123,6 +123,7 @@ describe('Study Log lookup and pending seek', () => {
       context: { before: [], after: [] },
       explanationLanguage: 'en',
       model: 'm',
+      suggestions: [],
     });
     const { handle } = handlerWith();
     expect(await handle({ type: 'log:find', videoId: '1', language: 'en', phrase: 'Hi  there.' })).toEqual({ entry: saved });

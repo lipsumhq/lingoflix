@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { StudyLogTab } from '@/entrypoints/options/StudyLogTab';
 import { takePendingSeek } from '@/lib/pending-seek';
-import { listEntries, saveExplanation } from '@/lib/study-log/store';
-import type { NewStudyLogEntry } from '@/lib/study-log/types';
+import { listExplanations, saveExplanation } from '@/lib/study-log/store';
+import type { NewExplanation } from '@/lib/study-log/types';
 
 beforeEach(() => fakeBrowser.reset());
 afterEach(cleanup);
 
-const line = (over: Partial<NewStudyLogEntry>): NewStudyLogEntry => ({
+const line = (over: Partial<NewExplanation>): NewExplanation => ({
   phrase: 'Line',
   response: '## Meaning\nAn explanation.',
   videoTimeMs: 1000,
@@ -24,6 +24,7 @@ const line = (over: Partial<NewStudyLogEntry>): NewStudyLogEntry => ({
   context: { before: [], after: [] },
   explanationLanguage: 'en',
   model: 'claude-sonnet-5-5',
+  suggestions: [],
   ...over,
 });
 
@@ -97,10 +98,10 @@ describe('Study Log tab', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Delete this line?' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(await listEntries()).toHaveLength(4);
+    expect(await listExplanations()).toHaveLength(4);
     fireEvent.click(within(pilot).getByRole('button', { name: 'Delete line' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
-    await waitFor(async () => expect(await listEntries()).toHaveLength(3));
+    await waitFor(async () => expect(await listExplanations()).toHaveLength(3));
     await waitFor(() => expect(screen.queryByText('Pilot line')).toBeNull());
   });
 
@@ -109,7 +110,7 @@ describe('Study Log tab', () => {
     render(<StudyLogTab />);
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Stranger Things Season 1' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
-    await waitFor(async () => expect((await listEntries()).map((e) => e.phrase)).toEqual(['Movie line']));
+    await waitFor(async () => expect((await listExplanations()).map((e) => e.phrase)).toEqual(['Movie line']));
   });
 
   it('Reset all empties the Study Log after confirming', async () => {
@@ -119,7 +120,7 @@ describe('Study Log tab', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Reset your Study Log?' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Reset all' }));
     expect(await screen.findByText('Nothing here yet')).toBeTruthy();
-    expect(await listEntries()).toEqual([]);
+    expect(await listExplanations()).toEqual([]);
   });
 
   it('shows a line saved from a Netflix tab without reloading', async () => {

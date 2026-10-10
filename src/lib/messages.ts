@@ -1,5 +1,5 @@
 import { browser } from '#imports';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 
 export type KeyTestResult = 'valid' | 'rejected' | 'network' | 'error';
 
@@ -9,7 +9,7 @@ export interface BackgroundRequests {
   'api-key:set': { request: { key: string }; response: { ok: boolean } };
   'api-key:remove': { request: object; response: { ok: true } };
   'api-key:test': { request: { key?: string }; response: { result: KeyTestResult; message: string } };
-  'log:find': { request: { videoId: string; language: string; phrase: string }; response: { entry: StudyLogEntry | null } };
+  'log:find': { request: { videoId: string; language: string; phrase: string }; response: { entry: Explanation | null } };
   'pending-seek:take': { request: { videoId: string }; response: { timeMs: number | null } };
   'open-options': { request: { hash?: string }; response: { ok: true } };
 }

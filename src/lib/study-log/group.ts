@@ -1,11 +1,11 @@
-import type { StudyLogEntry } from './types';
+import type { Explanation } from './types';
 
 export interface EpisodeNode {
   key: string;
   videoId: string;
   episodeNumber: number | null;
   episodeTitle: string | null;
-  entries: StudyLogEntry[];
+  entries: Explanation[];
 }
 
 export interface SeasonNode {
@@ -28,7 +28,7 @@ export interface MovieNode {
   key: string;
   videoId: string;
   title: string;
-  entries: StudyLogEntry[];
+  entries: Explanation[];
   updatedAt: string;
 }
 
@@ -47,10 +47,10 @@ function byNumber(a: number | null, b: number | null): number {
 }
 
 const newestFirst = (a: { updatedAt: string }, b: { updatedAt: string }) => b.updatedAt.localeCompare(a.updatedAt);
-const byTime = (a: StudyLogEntry, b: StudyLogEntry) => a.videoTimeMs - b.videoTimeMs;
+const byTime = (a: Explanation, b: Explanation) => a.videoTimeMs - b.videoTimeMs;
 
 /** Spec §5.5: series by most recently updated; seasons and episodes in numeric order; Movies by most recent. */
-export function groupStudyLog(entries: readonly StudyLogEntry[]): StudyLogTree {
+export function groupStudyLog(entries: readonly Explanation[]): StudyLogTree {
   const series = new Map<string, SeriesNode>();
   const movies = new Map<string, MovieNode>();
 

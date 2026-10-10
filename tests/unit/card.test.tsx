@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Card } from '@/entrypoints/netflix.content/overlay/Card';
 import type { CardState } from '@/entrypoints/netflix.content/overlay/card-state';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 
 afterEach(cleanup);
 
@@ -15,7 +15,7 @@ const BASE: CardState = {
   openedBy: 'hover',
   status: 'done',
   response: '## Meaning\nTime to **sleep**. See [this](https://example.com).\n\nPlain <b>bold</b> text.\n\n<script>alert(1)</script>',
-  entry: { id: 'e1' } as StudyLogEntry,
+  entry: { id: 'e1' } as Explanation,
   error: null,
   followUps: [],
   followUpBusy: false,

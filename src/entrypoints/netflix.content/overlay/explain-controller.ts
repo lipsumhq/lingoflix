@@ -2,7 +2,7 @@ import type { BridgeClient } from '@/lib/bridge/client';
 import { parseTitleInfo } from '@/lib/bridge/protocol';
 import type { ExplainRequest } from '@/lib/claude/prompt';
 import type { Settings } from '@/lib/settings';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 import type { SubtitleSession } from '../subtitle-session';
 import { IMAGE_SUBTITLES_MESSAGE, unionBox, type CardState, type FollowUpView } from './card-state';
 import { streamExplanation, type Connect } from './explain-port';
@@ -15,7 +15,7 @@ export interface ExplainControllerDeps {
   bridge: Pick<BridgeClient, 'callSync'>;
   pause: Pick<PauseGuard, 'resume'>;
   connect: Connect;
-  findEntry(videoId: string, language: string, phrase: string): Promise<StudyLogEntry | null>;
+  findEntry(videoId: string, language: string, phrase: string): Promise<Explanation | null>;
   getSettings(): Settings | null;
   getVideoId(): string | null;
   subtitleRects(): readonly Pick<DOMRect, 'left' | 'top' | 'right' | 'bottom'>[];

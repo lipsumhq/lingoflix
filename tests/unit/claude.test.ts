@@ -5,7 +5,7 @@ import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, titleLine, 
 import { parseClientMessage } from '@/lib/claude/protocol';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 
 const ALL = DEFAULT_SETTINGS.cardSections;
 const EPISODE: TitleInfo = {
@@ -84,7 +84,7 @@ describe('buildFollowUpMessages', () => {
       followUps: [{ question: 'Q1', answer: 'A1' }],
       context: { before: [], after: [] },
       ...EPISODE,
-    } as unknown as StudyLogEntry;
+    } as unknown as Explanation;
     const messages = buildFollowUpMessages(entry, '  Q2  ');
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user']);
     expect(messages[0]!.content).toContain('>>> Line');

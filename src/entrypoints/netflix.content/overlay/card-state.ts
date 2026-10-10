@@ -1,6 +1,6 @@
 import type { ExplainErrorCode } from '@/lib/claude/protocol';
 import type { CardSections } from '@/lib/settings';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 
 /** A viewport rectangle. */
 export interface Box {
@@ -30,7 +30,7 @@ export interface CardState {
   status: 'loading' | 'streaming' | 'done' | 'error';
   response: string;
   /** The Study Log entry once saved or found. */
-  entry: StudyLogEntry | null;
+  entry: Explanation | null;
   error: { code: CardErrorCode; message: string } | null;
   followUps: FollowUpView[];
   followUpBusy: boolean;

@@ -6,8 +6,8 @@ import { buttonSecondary, card, iconTile } from '@/components/styles';
 import { setPendingSeek } from '@/lib/pending-seek';
 import { episodeLabel, seasonLabel } from '@/lib/study-log/format';
 import { groupStudyLog, type StudyLogTree as Tree } from '@/lib/study-log/group';
-import { deleteEntries, listEntries, resetStudyLog, watchStudyLog } from '@/lib/study-log/store';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import { deleteExplanations, listExplanations, resetStudyLog, watchStudyLog } from '@/lib/study-log/store';
+import type { Explanation } from '@/lib/study-log/types';
 import { StudyLogEntries } from './StudyLogEntries';
 import { StudyLogTree } from './StudyLogTree';
 
@@ -16,7 +16,7 @@ interface Selectable {
   heading: string;
   subheading: string;
   deleteLabel: string;
-  entries: StudyLogEntry[];
+  entries: Explanation[];
 }
 
 interface PendingDelete {
@@ -52,20 +52,20 @@ function selectable(tree: Tree): Selectable[] {
 }
 
 /** Spec §5.5 Open at this moment: leave a pending seek, then open the episode on Netflix. */
-async function openInNetflix(entry: StudyLogEntry): Promise<void> {
+async function openInNetflix(entry: Explanation): Promise<void> {
   await setPendingSeek(entry.videoId, entry.videoTimeMs);
   await browser.tabs.create({ url: `https://www.netflix.com/watch/${entry.videoId}` });
 }
 
-export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (entry: StudyLogEntry) => Promise<void> } = {}) {
-  const [entries, setEntries] = useState<StudyLogEntry[] | null>(null);
+export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (entry: Explanation) => Promise<void> } = {}) {
+  const [entries, setEntries] = useState<Explanation[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingDelete | null>(null);
 
   useEffect(() => {
     let active = true;
     const load = () =>
-      void listEntries().then((list) => {
+      void listExplanations().then((list) => {
         if (active) setEntries(list);
       });
     load();
@@ -81,7 +81,7 @@ export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (
   const current = nodes.find((n) => n.key === selected) ?? nodes[0] ?? null;
 
   const confirmDelete = (title: string, body: string, ids: string[]) =>
-    setPending({ title, body, run: () => deleteEntries(ids) });
+    setPending({ title, body, run: () => deleteExplanations(ids) });
 
   if (entries === null) return <p className="text-sm font-semibold text-mute">Loading…</p>;
 

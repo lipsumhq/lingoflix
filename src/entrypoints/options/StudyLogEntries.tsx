@@ -3,19 +3,19 @@ import { useState } from 'react';
 import { Markdown } from '@/components/Markdown';
 import { buttonSecondary, card, focusRing } from '@/components/styles';
 import { formatTimestamp } from '@/lib/study-log/format';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 
 interface StudyLogEntriesProps {
   heading: string;
   subheading: string;
-  entries: StudyLogEntry[];
+  entries: Explanation[];
   deleteLabel: string;
   onDeleteAll(): void;
-  onDeleteEntry(entry: StudyLogEntry): void;
-  onOpenAtMoment(entry: StudyLogEntry): void;
+  onDeleteEntry(entry: Explanation): void;
+  onOpenAtMoment(entry: Explanation): void;
 }
 
-function EntryItem({ entry, onDelete, onOpen }: { entry: StudyLogEntry; onDelete(): void; onOpen(): void }) {
+function EntryItem({ entry, onDelete, onOpen }: { entry: Explanation; onDelete(): void; onOpen(): void }) {
   const [open, setOpen] = useState(false);
   return (
     <li className={`${card} px-4 py-3`}>

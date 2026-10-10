@@ -5,7 +5,7 @@ import { createSdkClient } from '@/lib/claude/client';
 import { serveExplainPort, type ExplainPort } from '@/lib/claude/explain-service';
 import { EXPLAIN_PORT } from '@/lib/claude/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
-import { appendFollowUp, findEntry, getEntry, saveExplanation } from '@/lib/study-log/store';
+import { appendFollowUp, findExplanation, getExplanation, saveExplanation } from '@/lib/study-log/store';
 
 export default defineBackground(() => {
   const handle = createMessageHandler({
@@ -13,7 +13,7 @@ export default defineBackground(() => {
     setApiKey,
     removeApiKey,
     createClient: createSdkClient,
-    findEntry,
+    findExplanation,
     takePendingSeek: (videoId) => takePendingSeek(videoId),
     openOptions: async (hash) => {
       await browser.tabs.create({ url: `${browser.runtime.getURL('/options.html')}${hash}` });
@@ -34,7 +34,7 @@ export default defineBackground(() => {
       getApiKey,
       createClient: createSdkClient,
       saveExplanation: (fields) => saveExplanation(fields),
-      getEntry,
+      getExplanation,
       appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
     });
   });

@@ -2,14 +2,14 @@ import { maskApiKey } from '@/lib/api-key';
 import type { ClaudeClient } from '@/lib/claude/client';
 import { toExplainError } from '@/lib/claude/errors';
 import type { BackgroundResponse } from '@/lib/messages';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 
 export interface MessageHandlerDeps {
   getApiKey(): Promise<string | null>;
   setApiKey(key: string): Promise<void>;
   removeApiKey(): Promise<void>;
   createClient(apiKey: string): ClaudeClient;
-  findEntry(videoId: string, language: string, phrase: string): Promise<StudyLogEntry | null>;
+  findExplanation(videoId: string, language: string, phrase: string): Promise<Explanation | null>;
   takePendingSeek(videoId: string): Promise<number | null>;
   openOptions(hash: string): Promise<void>;
 }
@@ -72,7 +72,7 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
       case 'log:find': {
         const { videoId, language, phrase } = m;
         if (typeof videoId !== 'string' || typeof language !== 'string' || typeof phrase !== 'string') return { entry: null };
-        return { entry: await deps.findEntry(videoId, language, phrase) } satisfies BackgroundResponse<'log:find'>;
+        return { entry: await deps.findExplanation(videoId, language, phrase) } satisfies BackgroundResponse<'log:find'>;
       }
       case 'pending-seek:take':
         return {

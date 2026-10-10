@@ -6,7 +6,7 @@ import {
   type ExplainErrorCode,
   type ExplainServerMessage,
 } from '@/lib/claude/protocol';
-import type { StudyLogEntry } from '@/lib/study-log/types';
+import type { Explanation } from '@/lib/study-log/types';
 
 export interface PortLike {
   postMessage(message: unknown): void;
@@ -21,7 +21,7 @@ export const connectExplainPort: Connect = () => browser.runtime.connect({ name:
 
 export interface StreamHandlers {
   onDelta(text: string): void;
-  onDone(entry: StudyLogEntry): void;
+  onDone(entry: Explanation): void;
   onError(code: ExplainErrorCode, message: string): void;
 }
 

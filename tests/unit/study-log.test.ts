@@ -4,18 +4,18 @@ import { episodeLabel, formatTimestamp, seasonLabel } from '@/lib/study-log/form
 import { groupStudyLog } from '@/lib/study-log/group';
 import {
   appendFollowUp,
-  deleteEntries,
-  findEntry,
-  getEntry,
-  listEntries,
+  deleteExplanations,
+  findExplanation,
+  getExplanation,
+  listExplanations,
   resetStudyLog,
   saveExplanation,
 } from '@/lib/study-log/store';
-import type { NewStudyLogEntry, StudyLogEntry } from '@/lib/study-log/types';
+import { isSaveSuggestion, toExplanation, type Explanation, type NewExplanation } from '@/lib/study-log/types';
 
 beforeEach(() => fakeBrowser.reset());
 
-const line = (over: Partial<NewStudyLogEntry> = {}): NewStudyLogEntry => ({
+const line = (over: Partial<NewExplanation> = {}): NewExplanation => ({
   phrase: "I'm gonna call it a night.",
   response: '## Meaning\nTime to sleep.',
   videoTimeMs: 1_834_200,
@@ -29,6 +29,7 @@ const line = (over: Partial<NewStudyLogEntry> = {}): NewStudyLogEntry => ({
   context: { before: ['Where are you going?'], after: [] },
   explanationLanguage: 'ko',
   model: 'claude-sonnet-5-5',
+  suggestions: [],
   ...over,
 });
 
@@ -37,14 +38,14 @@ const ids = () => {
   return () => `id-${++n}`;
 };
 
-describe('Study Log store', () => {
+describe('explanation store', () => {
   it('saves an explanation and finds it again by video, language, and normalized line', async () => {
     const saved = await saveExplanation(line(), new Date('2026-10-10T10:00:00Z'), ids());
     expect(saved).toMatchObject({ id: 'id-1', followUps: [], savedAt: '2026-10-10T10:00:00.000Z', updatedAt: '2026-10-10T10:00:00.000Z' });
-    expect(await findEntry('80077211', 'ko', "I'm gonna\ncall it   a night.")).toEqual(saved);
-    expect(await findEntry('80077211', 'en', "I'm gonna call it a night.")).toBeNull();
-    expect(await findEntry('11111111', 'ko', "I'm gonna call it a night.")).toBeNull();
-    expect(await getEntry('id-1')).toEqual(saved);
+    expect(await findExplanation('80077211', 'ko', "I'm gonna\ncall it   a night.")).toEqual(saved);
+    expect(await findExplanation('80077211', 'en', "I'm gonna call it a night.")).toBeNull();
+    expect(await findExplanation('11111111', 'ko', "I'm gonna call it a night.")).toBeNull();
+    expect(await getExplanation('id-1')).toEqual(saved);
   });
 
   it('saving the same line again replaces the response, keeps id and savedAt, clears follow-ups (Regenerate)', async () => {
@@ -58,7 +59,7 @@ describe('Study Log store', () => {
       savedAt: '2026-10-10T10:00:00.000Z',
       updatedAt: '2026-10-11T10:00:00.000Z',
     });
-    expect(await listEntries()).toHaveLength(1);
+    expect(await listExplanations()).toHaveLength(1);
   });
 
   it('appends follow-ups in order', async () => {
@@ -73,14 +74,14 @@ describe('Study Log store', () => {
     expect(await appendFollowUp('missing', { question: 'Q', answer: 'A' })).toBeNull();
   });
 
-  it('deletes entries and their lookup keys only', async () => {
+  it('deletes explanations and their lookup keys only', async () => {
     const next = ids();
     const a = await saveExplanation(line({ phrase: 'A' }), undefined, next);
     const b = await saveExplanation(line({ phrase: 'B' }), undefined, next);
-    await deleteEntries([a.id]);
-    expect(await findEntry(a.videoId, 'ko', 'A')).toBeNull();
-    expect(await getEntry(a.id)).toBeNull();
-    expect(await findEntry(b.videoId, 'ko', 'B')).toEqual(b);
+    await deleteExplanations([a.id]);
+    expect(await findExplanation(a.videoId, 'ko', 'A')).toBeNull();
+    expect(await getExplanation(a.id)).toBeNull();
+    expect(await findExplanation(b.videoId, 'ko', 'B')).toEqual(b);
   });
 
   it('Reset all removes the whole Study Log and nothing else', async () => {
@@ -89,18 +90,89 @@ describe('Study Log store', () => {
     await saveExplanation(line({ phrase: 'A' }), undefined, next);
     await saveExplanation(line({ phrase: 'B' }), undefined, next);
     await resetStudyLog();
-    expect(await listEntries()).toEqual([]);
+    expect(await listExplanations()).toEqual([]);
     expect(await fakeBrowser.storage.local.get(null)).toEqual({ apiKey: 'sk-ant-secret', other: 1 });
   });
 
-  it('skips corrupt stored entries', async () => {
+  it('skips corrupt stored explanations', async () => {
     await fakeBrowser.storage.local.set({ 'log:bad': { id: 'bad' }, 'log:worse': 'text' });
     await saveExplanation(line(), undefined, ids());
-    expect((await listEntries()).map((e) => e.id)).toEqual(['id-1']);
+    expect((await listExplanations()).map((e) => e.id)).toEqual(['id-1']);
   });
 });
 
-const entry = (over: Partial<StudyLogEntry>): StudyLogEntry => ({
+describe('explanation records (v2 spec §3.1)', () => {
+  const stored = (over: Record<string, unknown> = {}) => ({
+    ...line(),
+    id: 'old',
+    followUps: [],
+    savedAt: '2026-10-01T00:00:00.000Z',
+    updatedAt: '2026-10-01T00:00:00.000Z',
+    ...over,
+  });
+
+  it('reads a record saved before v2 (no suggestions field) with suggestions: []', async () => {
+    const { suggestions: _none, ...preV2 } = stored();
+    await fakeBrowser.storage.local.set({ 'log:old': preV2 });
+    expect(await getExplanation('old')).toEqual({ ...preV2, suggestions: [] });
+    expect((await listExplanations()).map((e) => e.suggestions)).toEqual([[]]);
+  });
+
+  it('reads a suggestions field that is not an array as no suggestions', async () => {
+    await fakeBrowser.storage.local.set({ 'log:old': stored({ suggestions: 'none' }) });
+    expect((await getExplanation('old'))?.suggestions).toEqual([]);
+  });
+
+  it('keeps well-formed suggestions and drops only the malformed ones', async () => {
+    await fakeBrowser.storage.local.set({
+      'log:old': stored({
+        suggestions: [
+          { type: 'idiom', text: 'call it a night', meaning: 'stop for the night' },
+          { type: 'slang', text: 'gonna', meaning: 'going to' },
+          { type: 'word', text: 5, meaning: 'five' },
+          { type: 'word', text: 'gonna' },
+          'gonna',
+          { type: 'word', text: 'gonna', meaning: 'going to' },
+        ],
+      }),
+    });
+    expect((await getExplanation('old'))?.suggestions).toEqual([
+      { type: 'idiom', text: 'call it a night', meaning: 'stop for the night' },
+      { type: 'word', text: 'gonna', meaning: 'going to' },
+    ]);
+  });
+
+  it('rejects values that are not explanations', () => {
+    expect(toExplanation({ id: 'x' })).toBeNull();
+    expect(toExplanation('text')).toBeNull();
+    expect(toExplanation(null)).toBeNull();
+    expect(toExplanation([])).toBeNull();
+  });
+
+  it('recognizes a save suggestion of each type', () => {
+    for (const type of ['word', 'phrase', 'idiom', 'line']) expect(isSaveSuggestion({ type, text: 't', meaning: '' })).toBe(true);
+    expect(isSaveSuggestion({ type: 'sentence', text: 't', meaning: '' })).toBe(false);
+    expect(isSaveSuggestion({ type: 'word', text: 't' })).toBe(false);
+  });
+
+  it('saves suggestions with the explanation, and Regenerate replaces them', async () => {
+    const first = await saveExplanation(
+      line({ suggestions: [{ type: 'word', text: 'gonna', meaning: 'going to' }] }),
+      new Date('2026-10-10T10:00:00Z'),
+      ids(),
+    );
+    expect(first.suggestions).toEqual([{ type: 'word', text: 'gonna', meaning: 'going to' }]);
+    const again = await saveExplanation(
+      line({ suggestions: [{ type: 'idiom', text: 'call it a night', meaning: 'go to bed' }] }),
+      new Date('2026-10-11T10:00:00Z'),
+      () => 'unused',
+    );
+    expect(again.suggestions).toEqual([{ type: 'idiom', text: 'call it a night', meaning: 'go to bed' }]);
+    expect(await getExplanation(first.id)).toEqual(again);
+  });
+});
+
+const explanation = (over: Partial<Explanation>): Explanation => ({
   id: 'x',
   phrase: 'p',
   response: 'r',
@@ -118,19 +190,20 @@ const entry = (over: Partial<StudyLogEntry>): StudyLogEntry => ({
   context: { before: [], after: [] },
   explanationLanguage: 'en',
   model: 'claude-sonnet-5-5',
+  suggestions: [],
   ...over,
 });
 
 describe('groupStudyLog', () => {
   const st = { seriesId: 'st', seriesTitle: 'Stranger Things' };
   const entries = [
-    entry({ id: 'st-e3-late', ...st, videoId: 'e3', episodeNumber: 3, videoTimeMs: 2000, updatedAt: '2026-10-05T00:00:00Z' }),
-    entry({ id: 'st-e3-early', ...st, videoId: 'e3', episodeNumber: 3, videoTimeMs: 1000, updatedAt: '2026-10-03T00:00:00Z' }),
-    entry({ id: 'st-e1', ...st, videoId: 'e1', episodeNumber: 1, updatedAt: '2026-10-02T00:00:00Z' }),
-    entry({ id: 'st-s2', ...st, videoId: 's2e1', seasonNumber: 2, episodeNumber: 1, updatedAt: '2026-10-01T00:00:00Z' }),
-    entry({ id: 'dark', seriesId: 'dark', seriesTitle: 'Dark', videoId: 'd1', updatedAt: '2026-10-06T00:00:00Z' }),
-    entry({ id: 'roma', kind: 'movie', seriesId: null, seriesTitle: 'Roma', videoId: 'm1', seasonNumber: null, episodeNumber: null, updatedAt: '2026-10-04T00:00:00Z' }),
-    entry({ id: 'okja', kind: 'movie', seriesId: null, seriesTitle: 'Okja', videoId: 'm2', seasonNumber: null, episodeNumber: null, updatedAt: '2026-10-07T00:00:00Z' }),
+    explanation({ id: 'st-e3-late', ...st, videoId: 'e3', episodeNumber: 3, videoTimeMs: 2000, updatedAt: '2026-10-05T00:00:00Z' }),
+    explanation({ id: 'st-e3-early', ...st, videoId: 'e3', episodeNumber: 3, videoTimeMs: 1000, updatedAt: '2026-10-03T00:00:00Z' }),
+    explanation({ id: 'st-e1', ...st, videoId: 'e1', episodeNumber: 1, updatedAt: '2026-10-02T00:00:00Z' }),
+    explanation({ id: 'st-s2', ...st, videoId: 's2e1', seasonNumber: 2, episodeNumber: 1, updatedAt: '2026-10-01T00:00:00Z' }),
+    explanation({ id: 'dark', seriesId: 'dark', seriesTitle: 'Dark', videoId: 'd1', updatedAt: '2026-10-06T00:00:00Z' }),
+    explanation({ id: 'roma', kind: 'movie', seriesId: null, seriesTitle: 'Roma', videoId: 'm1', seasonNumber: null, episodeNumber: null, updatedAt: '2026-10-04T00:00:00Z' }),
+    explanation({ id: 'okja', kind: 'movie', seriesId: null, seriesTitle: 'Okja', videoId: 'm2', seasonNumber: null, episodeNumber: null, updatedAt: '2026-10-07T00:00:00Z' }),
   ];
 
   it('builds series → season → episode with counts, plus Movies, in the spec order', () => {
@@ -152,8 +225,8 @@ describe('groupStudyLog', () => {
 
   it('puts unnumbered seasons and episodes last', () => {
     const tree = groupStudyLog([
-      entry({ id: 'a', seasonNumber: null, episodeNumber: null, videoId: 'x' }),
-      entry({ id: 'b', seasonNumber: 1, episodeNumber: 2, videoId: 'y' }),
+      explanation({ id: 'a', seasonNumber: null, episodeNumber: null, videoId: 'x' }),
+      explanation({ id: 'b', seasonNumber: 1, episodeNumber: 2, videoId: 'y' }),
     ]);
     expect(tree.series[0]!.seasons.map((s) => s.seasonNumber)).toEqual([1, null]);
   });
