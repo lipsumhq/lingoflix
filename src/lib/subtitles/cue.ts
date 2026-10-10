@@ -7,5 +7,5 @@ export interface Cue {
 
 /** Comparable form of a line: line breaks and whitespace runs become one space; zero-width characters go. */
 export function normalizeLine(text: string): string {
-  return text.replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  return text.replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\s+/g, ' ').trim();
 }

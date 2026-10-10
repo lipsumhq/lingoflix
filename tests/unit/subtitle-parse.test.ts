@@ -34,7 +34,7 @@ Fish &amp; chips
 
 describe('normalizeLine', () => {
   it('collapses line breaks and whitespace and drops zero-width characters', () => {
-    expect(normalizeLine("  I'm gonna\ncall it​  a night. ")).toBe("I'm gonna call it a night.");
+    expect(normalizeLine("  I'm gonna\ncall it\u200b  a night. ")).toBe("I'm gonna call it a night.");
   });
 });
 
@@ -92,7 +92,7 @@ describe('parseWebVtt', () => {
 describe('parseSubtitleFile', () => {
   it('sniffs the format', () => {
     expect(parseSubtitleFile(VTT)).toHaveLength(2);
-    expect(parseSubtitleFile(`﻿${VTT}`)).toHaveLength(2);
+    expect(parseSubtitleFile(`\ufeff${VTT}`)).toHaveLength(2);
     expect(parseSubtitleFile(NETFLIX_DFXP)).toHaveLength(3);
     expect(parseSubtitleFile('not subtitles')).toEqual([]);
   });
