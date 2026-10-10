@@ -23,7 +23,7 @@ export async function mountOverlay(ctx: ContentScriptContext, app: ReactNode): P
   const ui = await createShadowRootUi<{ root: Root; release: () => void }>(ctx, {
     name: 'lingoflix-overlay',
     position: 'inline',
-    anchor: () => document.querySelector(PLAYER_CONTAINER_SELECTOR),
+    anchor: PLAYER_CONTAINER_SELECTOR,
     append: 'last',
     onMount(container, _shadow, shadowHost) {
       host = shadowHost;
