@@ -16,6 +16,7 @@ async function fetchText(url: string): Promise<string> {
 export default defineContentScript({
   matches: ['https://www.netflix.com/*'],
   runAt: 'document_start',
+  cssInjectionMode: 'ui',
   main(ctx) {
     const bridge = createBridgeClient(document);
     const notifier = createNotifier(document);

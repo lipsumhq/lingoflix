@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+@import '../../../assets/tokens.css';
+@import '../../../assets/theme.css';
+
+/*
+ * On Netflix (spec §5.10): always the dark tokens, px sizes (Netflix's root font size is not ours, and rem
+ * units would follow it), and no Nunito (the extension's font files aren't exposed to the page, so the
+ * stack falls through to ui-rounded / system-ui). WXT rewrites :root to :host inside the shadow root.
+ */
+:root {
+  color-scheme: dark;
+  font-family: ui-rounded, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--lf-ink);
+}
+
+@theme {
+  --spacing: 4px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 26px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+}

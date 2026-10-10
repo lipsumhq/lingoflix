@@ -1,52 +1,7 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/nunito';
-
-/*
- * LingoFlix look and feel (spec §5.10): Popcorn yellow, Nunito, 2px borders, pressable buttons.
- * Every color is a light-dark() pair. color-scheme picks the side: the OS setting by default,
- * or pinned by <html data-theme="light|dark"> (src/lib/theme.ts).
- */
-:root {
-  color-scheme: light dark;
-  --lf-page: light-dark(#ffffff, #131a22);
-  --lf-card: light-dark(#ffffff, #1b2430);
-  --lf-line: light-dark(#e5e5e5, #2c3846);
-  --lf-soft: light-dark(#f0f0f0, #222d3a);
-  --lf-ink: light-dark(#3c3c3c, #f1f5f9);
-  --lf-mute: light-dark(#6b6b6b, #94a7bb);
-  --lf-tint: light-dark(#fff7d6, rgb(255 200 0 / 0.12));
-  --lf-tint-line: light-dark(#ffd84d, rgb(255 200 0 / 0.45));
-  --lf-tint-ink: light-dark(#7a5c00, #ffc800);
-  --lf-brand: #ffc800;
-  --lf-brand-edge: light-dark(#e0a800, #b88a00);
-  --lf-on-brand: #3a2e00;
-  --lf-danger: light-dark(#c62828, #ff8a80);
-  --lf-focus: light-dark(#3a2e00, #ffc800);
-}
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-:root[data-theme='dark'] {
-  color-scheme: dark;
-}
-
-@theme inline {
-  --color-page: var(--lf-page);
-  --color-card: var(--lf-card);
-  --color-line: var(--lf-line);
-  --color-soft: var(--lf-soft);
-  --color-ink: var(--lf-ink);
-  --color-mute: var(--lf-mute);
-  --color-tint: var(--lf-tint);
-  --color-tint-line: var(--lf-tint-line);
-  --color-tint-ink: var(--lf-tint-ink);
-  --color-brand: var(--lf-brand);
-  --color-brand-edge: var(--lf-brand-edge);
-  --color-on-brand: var(--lf-on-brand);
-  --color-danger: var(--lf-danger);
-  --color-focus: var(--lf-focus);
-  --font-sans: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
-}
+@import './tokens.css';
+@import './theme.css';
 
 @layer base {
   body {

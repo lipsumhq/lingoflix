@@ -1,0 +1,17 @@
+@theme inline {
+  --color-page: var(--lf-page);
+  --color-card: var(--lf-card);
+  --color-line: var(--lf-line);
+  --color-soft: var(--lf-soft);
+  --color-ink: var(--lf-ink);
+  --color-mute: var(--lf-mute);
+  --color-tint: var(--lf-tint);
+  --color-tint-line: var(--lf-tint-line);
+  --color-tint-ink: var(--lf-tint-ink);
+  --color-brand: var(--lf-brand);
+  --color-brand-edge: var(--lf-brand-edge);
+  --color-on-brand: var(--lf-on-brand);
+  --color-danger: var(--lf-danger);
+  --color-focus: var(--lf-focus);
+  --font-sans: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
+}
