@@ -17,6 +17,8 @@ export interface ExplainRequest {
   /** A code from src/lib/languages.ts. */
   language: string;
   sections: CardSections;
+  /** v2 spec §5.2: lines before the context window, oldest first; empty when Send the story so far is off. */
+  storySoFar: StoryLine[];
 }
 
 export interface ChatMessage {

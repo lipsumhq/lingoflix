@@ -5,7 +5,8 @@ import { createSdkClient } from '@/lib/claude/client';
 import { serveExplainPort, type ExplainPort } from '@/lib/claude/explain-service';
 import { EXPLAIN_PORT } from '@/lib/claude/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
-import { appendFollowUp, findExplanation, getExplanation, saveExplanation } from '@/lib/study-log/store';
+import { listItems, savedKeysFor } from '@/lib/study-log/items';
+import { appendFollowUp, findExplanation, getExplanation, listExplanations, saveExplanation } from '@/lib/study-log/store';
 
 export default defineBackground(() => {
   const handle = createMessageHandler({
@@ -36,6 +37,8 @@ export default defineBackground(() => {
       saveExplanation: (fields) => saveExplanation(fields),
       getExplanation,
       appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
+      loadHistory: async () => ({ items: await listItems(), explanations: await listExplanations() }),
+      savedKeysFor,
     });
   });
 });

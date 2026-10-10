@@ -21,7 +21,7 @@ export const connectExplainPort: Connect = () => browser.runtime.connect({ name:
 
 export interface StreamHandlers {
   onDelta(text: string): void;
-  onDone(entry: Explanation): void;
+  onDone(explanation: Explanation): void;
   onError(code: ExplainErrorCode, message: string): void;
 }
 
@@ -46,7 +46,7 @@ export function streamExplanation(connect: Connect, message: ExplainClientMessag
       handlers.onDelta(m.text);
     } else if (m.type === 'done') {
       finished = true;
-      handlers.onDone(m.entry);
+      handlers.onDone(m.explanation);
       port.disconnect();
     } else if (m.type === 'error') {
       finished = true;

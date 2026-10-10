@@ -2,6 +2,7 @@ import { parseTitleInfo } from '@/lib/bridge/protocol';
 import { isExplanationLanguage } from '@/lib/languages';
 import { CARD_SECTION_IDS, type CardSections } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
+import { STORY_SEND_LIMIT, type StoryLine } from '@/lib/subtitles/context';
 import type { ExplainRequest } from './prompt';
 
 /** One Port per request (spec §6.3); disconnecting aborts it. */
@@ -9,7 +10,7 @@ export const EXPLAIN_PORT = 'explain';
 
 export type ExplainClientMessage =
   | { type: 'start'; request: ExplainRequest }
-  | { type: 'follow-up'; entryId: string; question: string; sections: CardSections };
+  | { type: 'follow-up'; explanationId: string; question: string; sections: CardSections; storySoFar: StoryLine[] };
 
 export type ExplainErrorCode = 'no-key' | 'bad-key' | 'busy' | 'network' | 'api';
 
@@ -25,13 +26,16 @@ export const ERROR_COPY: Record<ExplainErrorCode, string> = {
   api: 'Claude returned an error',
 };
 
+/** v2 spec §4.2: the stored explanation, and the index keys of its card rows that are saved. */
 export type ExplainServerMessage =
   | { type: 'delta'; text: string }
-  | { type: 'done'; entry: Explanation }
+  | { type: 'done'; explanation: Explanation; savedKeys: string[] }
   | { type: 'error'; code: ExplainErrorCode; message: string };
 
 const MAX_LINE_CHARS = 2000;
 const MAX_QUESTION_CHARS = 2000;
+/** More than the content script ever sends (STORY_SEND_LIMIT lines of normal subtitle length). */
+const MAX_STORY_CHARS = 200_000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -43,9 +47,26 @@ function parseSections(value: unknown): CardSections | null {
   return { meaning: !!value.meaning, keyExpressions: !!value.keyExpressions, howToUse: !!value.howToUse, followUp: !!value.followUp };
 }
 
+/** v2 spec §5.2: at most STORY_SEND_LIMIT lines, each a subtitle line with an episode time. */
+function parseStory(value: unknown): StoryLine[] | null {
+  if (!Array.isArray(value) || value.length > STORY_SEND_LIMIT) return null;
+  const lines: StoryLine[] = [];
+  let total = 0;
+  for (const raw of value) {
+    if (!isRecord(raw)) return null;
+    const { startMs, text } = raw;
+    if (typeof startMs !== 'number' || !Number.isFinite(startMs) || startMs < 0) return null;
+    if (!isLine(text)) return null;
+    total += text.length;
+    if (total > MAX_STORY_CHARS) return null;
+    lines.push({ startMs, text });
+  }
+  return lines;
+}
+
 function parseRequest(value: unknown): ExplainRequest | null {
   if (!isRecord(value)) return null;
-  const { phrase, context, title, videoId, videoTimeMs, language, sections } = value;
+  const { phrase, context, title, videoId, videoTimeMs, language, sections, storySoFar } = value;
   if (!isLine(phrase) || !phrase.trim()) return null;
   if (!isRecord(context) || !isLines(context.before) || !isLines(context.after)) return null;
   if (typeof videoId !== 'string' || !/^\d+$/.test(videoId)) return null;
@@ -53,7 +74,8 @@ function parseRequest(value: unknown): ExplainRequest | null {
   if (!isExplanationLanguage(language)) return null;
   const parsedSections = parseSections(sections);
   const parsedTitle = title === null ? null : parseTitleInfo(title);
-  if (!parsedSections || (title !== null && !parsedTitle)) return null;
+  const parsedStory = parseStory(storySoFar);
+  if (!parsedSections || !parsedStory || (title !== null && !parsedTitle)) return null;
   return {
     phrase,
     context: { before: context.before, after: context.after },
@@ -62,6 +84,7 @@ function parseRequest(value: unknown): ExplainRequest | null {
     videoTimeMs,
     language,
     sections: parsedSections,
+    storySoFar: parsedStory,
   };
 }
 
@@ -72,11 +95,12 @@ export function parseClientMessage(value: unknown): ExplainClientMessage | null 
     return request ? { type: 'start', request } : null;
   }
   if (value.type === 'follow-up') {
-    const { entryId, question } = value;
+    const { explanationId, question } = value;
     const sections = parseSections(value.sections);
-    if (typeof entryId !== 'string' || !entryId || !sections) return null;
+    const storySoFar = parseStory(value.storySoFar);
+    if (typeof explanationId !== 'string' || !explanationId || !sections || !storySoFar) return null;
     if (typeof question !== 'string' || !question.trim() || question.length > MAX_QUESTION_CHARS) return null;
-    return { type: 'follow-up', entryId, question, sections };
+    return { type: 'follow-up', explanationId, question, sections, storySoFar };
   }
   return null;
 }

@@ -50,14 +50,14 @@ describe('streamExplanation', () => {
     const fake = fakePort();
     const onDelta = vi.fn();
     const onDone = vi.fn();
-    streamExplanation(() => fake.port, { type: 'follow-up', entryId: 'e', question: 'q', sections: DEFAULT_SETTINGS.cardSections }, {
+    streamExplanation(() => fake.port, { type: 'follow-up', explanationId: 'e', question: 'q', sections: DEFAULT_SETTINGS.cardSections, storySoFar: [] }, {
       onDelta,
       onDone,
       onError: vi.fn(),
     });
     expect(fake.posted).toHaveLength(1);
     fake.receive({ type: 'delta', text: 'Hi' });
-    fake.receive({ type: 'done', entry: { id: 'e' } });
+    fake.receive({ type: 'done', explanation: { id: 'e' }, savedKeys: [] });
     expect(onDelta).toHaveBeenCalledWith('Hi');
     expect(onDone).toHaveBeenCalledWith({ id: 'e' });
     expect(fake.port.disconnect).toHaveBeenCalled();
@@ -190,12 +190,13 @@ describe('explain controller', () => {
         videoTimeMs: 22_000,
         language: 'ko',
         sections: settings.cardSections,
+        storySoFar: [],
       },
     });
     ports[0]!.receive({ type: 'delta', text: 'Hel' });
     ports[0]!.receive({ type: 'delta', text: 'lo' });
     expect(store.get()).toMatchObject({ status: 'streaming', response: 'Hello' });
-    ports[0]!.receive({ type: 'done', entry: { ...SAVED, response: 'Hello', followUps: [] } });
+    ports[0]!.receive({ type: 'done', explanation: { ...SAVED, response: 'Hello', followUps: [] }, savedKeys: [] });
     expect(store.get()).toMatchObject({ status: 'done', response: 'Hello', entry: { id: 'e1' } });
   });
 
@@ -216,10 +217,16 @@ describe('explain controller', () => {
     explain.askFollowUp('ignored while busy');
     expect(store.get()?.followUps).toEqual([{ question: 'Is it formal?', answer: '', status: 'streaming', error: null }]);
     expect(ports).toHaveLength(1);
-    expect(ports[0]!.posted[0]).toEqual({ type: 'follow-up', entryId: 'e1', question: 'Is it formal?', sections: settings.cardSections });
+    expect(ports[0]!.posted[0]).toEqual({
+      type: 'follow-up',
+      explanationId: 'e1',
+      question: 'Is it formal?',
+      sections: settings.cardSections,
+      storySoFar: [],
+    });
     ports[0]!.receive({ type: 'delta', text: 'No' });
     expect(store.get()?.followUps[0]?.answer).toBe('No');
-    ports[0]!.receive({ type: 'done', entry: { ...SAVED, followUps: [{ question: 'Is it formal?', answer: 'No.' }] } });
+    ports[0]!.receive({ type: 'done', explanation: { ...SAVED, followUps: [{ question: 'Is it formal?', answer: 'No.' }] }, savedKeys: [] });
     expect(store.get()).toMatchObject({ followUpBusy: false, followUps: [{ answer: 'No.', status: 'done' }] });
   });
 

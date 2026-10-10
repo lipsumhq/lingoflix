@@ -99,6 +99,7 @@ export function createExplainController(deps: ExplainControllerDeps): ExplainCon
       videoTimeMs: details.timing?.startMs ?? (state.ok ? state.result.currentTimeMs : 0),
       language: settings.explanationLanguage,
       sections: settings.cardSections,
+      storySoFar: [],
     };
     request = req;
     deps.store.set(base);
@@ -152,7 +153,7 @@ export function createExplainController(deps: ExplainControllerDeps): ExplainCon
         update(key, (c) => ({ ...c, ...extra, followUps: c.followUps.map((f, i) => (i === index ? fn(f) : f)) }));
       cancelFollowUp = streamExplanation(
         deps.connect,
-        { type: 'follow-up', entryId: card.entry.id, question: text, sections: settings.cardSections },
+        { type: 'follow-up', explanationId: card.entry.id, question: text, sections: settings.cardSections, storySoFar: [] },
         {
           onDelta: (delta) => setFollowUp((f) => ({ ...f, answer: f.answer + delta })),
           onDone: (entry) =>

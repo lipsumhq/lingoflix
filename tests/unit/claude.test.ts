@@ -13,6 +13,7 @@ import { parseClientMessage } from '@/lib/claude/protocol';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
+import { STORY_SEND_LIMIT, type StoryLine } from '@/lib/subtitles/context';
 
 const ALL = DEFAULT_SETTINGS.cardSections;
 const EPISODE: TitleInfo = {
@@ -188,23 +189,33 @@ describe('toExplainError', () => {
 });
 
 describe('parseClientMessage', () => {
+  const story: StoryLine[] = [
+    { startMs: 1000, text: 'Earlier line' },
+    { startMs: 4000, text: 'Another line' },
+  ];
   const request: ExplainRequest = {
     phrase: 'Hi',
     context: { before: ['a'], after: [] },
     title: EPISODE,
     videoId: '80077211',
-    videoTimeMs: 1000,
+    videoTimeMs: 10_000,
     language: 'ko',
     sections: ALL,
+    storySoFar: story,
   };
 
-  it('accepts well-formed start and follow-up messages', () => {
+  it('accepts well-formed start and follow-up messages, with the story so far', () => {
     expect(parseClientMessage({ type: 'start', request })).toEqual({ type: 'start', request });
-    expect(parseClientMessage({ type: 'follow-up', entryId: 'e1', question: 'Why?', sections: ALL })).toEqual({
+    expect(parseClientMessage({ type: 'start', request: { ...request, storySoFar: [] } })).toEqual({
+      type: 'start',
+      request: { ...request, storySoFar: [] },
+    });
+    expect(parseClientMessage({ type: 'follow-up', explanationId: 'e1', question: 'Why?', sections: ALL, storySoFar: story })).toEqual({
       type: 'follow-up',
-      entryId: 'e1',
+      explanationId: 'e1',
       question: 'Why?',
       sections: ALL,
+      storySoFar: story,
     });
   });
 
@@ -213,7 +224,22 @@ describe('parseClientMessage', () => {
     expect(parseClientMessage({ type: 'start', request: { ...request, language: 'xx' } })).toBeNull();
     expect(parseClientMessage({ type: 'start', request: { ...request, videoTimeMs: Number.NaN } })).toBeNull();
     expect(parseClientMessage({ type: 'start', request: { ...request, context: { before: [1], after: [] } } })).toBeNull();
-    expect(parseClientMessage({ type: 'follow-up', entryId: 'e1', question: '   ', sections: ALL })).toBeNull();
+    expect(parseClientMessage({ type: 'follow-up', explanationId: 'e1', question: '   ', sections: ALL, storySoFar: [] })).toBeNull();
+    expect(parseClientMessage({ type: 'follow-up', entryId: 'e1', question: 'Why?', sections: ALL, storySoFar: [] })).toBeNull(); // old field name
+    expect(parseClientMessage({ type: 'follow-up', explanationId: 'e1', question: 'Why?', sections: ALL })).toBeNull(); // no story
     expect(parseClientMessage({ type: 'nope' })).toBeNull();
+  });
+
+  it('rejects a story that is malformed or larger than the content script ever sends', () => {
+    const start = (storySoFar: unknown) => parseClientMessage({ type: 'start', request: { ...request, storySoFar } });
+    expect(start(undefined)).toBeNull();
+    expect(start([{ startMs: -1, text: 'x' }])).toBeNull();
+    expect(start([{ startMs: Number.NaN, text: 'x' }])).toBeNull();
+    expect(start([{ startMs: 1, text: 7 }])).toBeNull();
+    expect(start(['just text'])).toBeNull();
+    expect(start([{ startMs: 1, text: 'x'.repeat(2001) }])).toBeNull();
+    expect(start(Array.from({ length: STORY_SEND_LIMIT + 1 }, (_, i) => ({ startMs: i, text: 'x' })))).toBeNull();
+    expect(start(Array.from({ length: 101 }, (_, i) => ({ startMs: i, text: 'x'.repeat(2000) })))).toBeNull(); // 202 000 characters
+    expect(start(Array.from({ length: STORY_SEND_LIMIT }, (_, i) => ({ startMs: i, text: 'line' })))).not.toBeNull();
   });
 });

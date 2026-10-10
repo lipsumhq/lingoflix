@@ -1,9 +1,12 @@
-import { CLAUDE_IDLE_TIMEOUT_MS, CLAUDE_MAX_TOKENS, CLAUDE_MODEL } from '@/lib/config';
-import type { Explanation, FollowUp, NewExplanation } from '@/lib/study-log/types';
-import type { ClaudeClient } from './client';
+import { CLAUDE_EXPLAIN_MAX_TOKENS, CLAUDE_IDLE_TIMEOUT_MS, CLAUDE_MAX_TOKENS, CLAUDE_MODEL } from '@/lib/config';
+import type { Explanation, FollowUp, NewExplanation, SaveSuggestion } from '@/lib/study-log/types';
+import type { StoryLine } from '@/lib/subtitles/context';
+import type { ClaudeClient, StreamParams, StreamResult, SystemBlock, ToolCall } from './client';
+import { learningHistoryBlock, splitStory, storyBlock, type HistorySources } from './context-blocks';
 import { toExplainError } from './errors';
-import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, type ChatMessage, type ExplainRequest } from './prompt';
+import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, type ExplainRequest } from './prompt';
 import { ERROR_COPY, parseClientMessage, type ExplainErrorCode, type ExplainServerMessage } from './protocol';
+import { SUGGEST_SAVES_TOOL, SUGGEST_SAVES_TOOL_NAME, validateSuggestions } from './suggestions';
 
 /** The part of `chrome.runtime.Port` the service uses. */
 export interface ExplainPort {
@@ -18,14 +21,18 @@ export interface ExplainServiceDeps {
   saveExplanation(fields: NewExplanation): Promise<Explanation>;
   getExplanation(id: string): Promise<Explanation | null>;
   appendFollowUp(id: string, followUp: FollowUp): Promise<Explanation | null>;
+  /** Saved items and explanations, for the learning history block (v2 spec §5.2). */
+  loadHistory(): Promise<HistorySources>;
+  /** Index keys of the explanation's card rows that are saved (v2 spec §4.2). */
+  savedKeysFor(explanation: Explanation): Promise<string[]>;
   idleTimeoutMs?: number;
 }
 
 const UNREADABLE = 'LingoFlix sent a request it could not read.';
-const ENTRY_GONE = 'This explanation is no longer in your Study Log.';
+const EXPLANATION_GONE = 'This explanation is no longer available.';
 const EMPTY_ANSWER = 'Claude returned an empty answer.';
 
-function explanationFields(request: ExplainRequest, response: string): NewExplanation {
+function explanationFields(request: ExplainRequest, response: string, suggestions: SaveSuggestion[]): NewExplanation {
   const title = request.title;
   return {
     phrase: request.phrase,
@@ -41,8 +48,36 @@ function explanationFields(request: ExplainRequest, response: string): NewExplan
     context: request.context,
     explanationLanguage: request.language,
     model: CLAUDE_MODEL,
-    suggestions: [],
+    suggestions,
   };
+}
+
+/** v2 spec §5.4: the first suggest_saves call, checked; none when Claude didn't call it. */
+function suggestionsFrom(calls: readonly ToolCall[], line: string): SaveSuggestion[] {
+  const call = calls.find((c) => c.name === SUGGEST_SAVES_TOOL_NAME);
+  return call ? validateSuggestions(call.input, line) : [];
+}
+
+/**
+ * v2 spec §5.1–5.2: the instructions, then the story before the last 5-minute boundary and the learning
+ * history, both cached; empty blocks are left out. Lines at or after the explained line never go out,
+ * whatever the page sent (no spoilers); the rest of the story goes into the first user message.
+ */
+function contextFor(
+  instructions: string,
+  story: readonly StoryLine[],
+  lineStartMs: number,
+  history: string | null,
+): { system: SystemBlock[]; recent: StoryLine[] } {
+  const { cached, recent } = splitStory(
+    story.filter((line) => line.startMs < lineStartMs),
+    lineStartMs,
+  );
+  const system: SystemBlock[] = [{ text: instructions, cache: false }];
+  const storyText = storyBlock(cached);
+  if (storyText) system.push({ text: storyText, cache: true });
+  if (history) system.push({ text: history, cache: true });
+  return { system, recent };
 }
 
 /**
@@ -92,26 +127,41 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
     if (!apiKey) return fail('no-key');
     if (disconnected) return;
 
-    let system: string;
-    let messages: ChatMessage[];
-    let finish: (text: string) => Promise<Explanation | null>;
+    let params: StreamParams;
+    let finish: (result: StreamResult) => Promise<Explanation | null>;
     if (message.type === 'start') {
       const { request } = message;
-      system = buildSystemPrompt(request.language, request.sections);
-      messages = [{ role: 'user', content: buildUserMessage(request) }];
-      finish = (text) => deps.saveExplanation(explanationFields(request, text));
+      const history = learningHistoryBlock(await deps.loadHistory(), request.phrase);
+      const instructions = buildSystemPrompt(request.language, request.sections);
+      const { system, recent } = contextFor(instructions, request.storySoFar, request.videoTimeMs, history);
+      params = {
+        model: CLAUDE_MODEL,
+        maxTokens: CLAUDE_EXPLAIN_MAX_TOKENS,
+        system,
+        messages: [{ role: 'user', content: buildUserMessage(request, recent) }],
+        tools: [SUGGEST_SAVES_TOOL],
+      };
+      finish = (result) =>
+        deps.saveExplanation(explanationFields(request, result.text, suggestionsFrom(result.toolCalls, request.phrase)));
     } else {
-      const explanation = await deps.getExplanation(message.entryId);
-      if (!explanation) return fail('api', ENTRY_GONE);
-      system = buildSystemPrompt(explanation.explanationLanguage, message.sections, true);
-      messages = buildFollowUpMessages(explanation, message.question);
-      finish = (text) => deps.appendFollowUp(explanation.id, { question: message.question.trim(), answer: text });
+      const explanation = await deps.getExplanation(message.explanationId);
+      if (!explanation) return fail('api', EXPLANATION_GONE);
+      const history = learningHistoryBlock(await deps.loadHistory(), explanation.phrase);
+      const instructions = buildSystemPrompt(explanation.explanationLanguage, message.sections, true);
+      const { system, recent } = contextFor(instructions, message.storySoFar, explanation.videoTimeMs, history);
+      params = {
+        model: CLAUDE_MODEL,
+        maxTokens: CLAUDE_MAX_TOKENS,
+        system,
+        messages: buildFollowUpMessages(explanation, message.question, recent),
+      };
+      finish = (result) => deps.appendFollowUp(explanation.id, { question: message.question.trim(), answer: result.text });
     }
 
     armIdleTimer();
     try {
-      const { text } = await deps.createClient(apiKey).stream(
-        { model: CLAUDE_MODEL, maxTokens: CLAUDE_MAX_TOKENS, system, messages },
+      const result = await deps.createClient(apiKey).stream(
+        params,
         (delta) => {
           armIdleTimer();
           post({ type: 'delta', text: delta });
@@ -120,10 +170,12 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
       );
       clearTimeout(idleTimer);
       if (disconnected) return; // the card closed: nothing is saved
-      if (!text.trim()) return fail('api', EMPTY_ANSWER);
-      const saved = await finish(text);
-      if (!saved) return fail('api', ENTRY_GONE);
-      post({ type: 'done', entry: saved });
+      if (!result.text.trim()) return fail('api', EMPTY_ANSWER);
+      const explanation = await finish(result);
+      if (!explanation) return fail('api', EXPLANATION_GONE);
+      // The explanation is stored; not knowing which rows are saved only shows them as unsaved.
+      const savedKeys = await deps.savedKeysFor(explanation).catch((): string[] => []);
+      post({ type: 'done', explanation, savedKeys });
     } catch (err) {
       clearTimeout(idleTimer);
       if (disconnected) return;
