@@ -1,7 +1,7 @@
 import { APIError } from '@anthropic-ai/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import type { ClaudeClient, StreamParams } from '@/lib/claude/client';
+import type { ClaudeClient, StreamParams, ToolCall } from '@/lib/claude/client';
 import { serveExplainPort, type ExplainPort, type ExplainServiceDeps } from '@/lib/claude/explain-service';
 import type { ExplainRequest } from '@/lib/claude/prompt';
 import type { ExplainServerMessage } from '@/lib/claude/protocol';
@@ -41,11 +41,11 @@ function fakePort() {
   return { port, sent, send: (m: unknown) => onMessage(m), disconnect: () => onDisconnect() };
 }
 
-function fakeClient(script: { deltas?: string[]; error?: unknown; hang?: boolean } = {}) {
+function fakeClient(script: { deltas?: string[]; error?: unknown; hang?: boolean; toolCalls?: ToolCall[] } = {}) {
   const calls: StreamParams[] = [];
   const signals: AbortSignal[] = [];
   const client: ClaudeClient = {
-    async streamText(params, onText, signal) {
+    async stream(params, onText, signal) {
       calls.push(params);
       signals.push(signal);
       if (script.hang) {
@@ -56,7 +56,7 @@ function fakeClient(script: { deltas?: string[]; error?: unknown; hang?: boolean
         onText(delta);
       }
       if (script.error) throw script.error;
-      return (script.deltas ?? []).join('');
+      return { text: (script.deltas ?? []).join(''), toolCalls: script.toolCalls ?? [] };
     },
     async checkKey() {},
   };

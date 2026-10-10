@@ -14,7 +14,7 @@ const FROM_PAGE = { fromExtensionPage: true };
 const FROM_NETFLIX = { fromExtensionPage: false };
 
 function handlerWith(checkKey: ClaudeClient['checkKey'] = async () => {}, over: Partial<MessageHandlerDeps> = {}) {
-  const createClient = vi.fn((_key: string): ClaudeClient => ({ streamText: async () => '', checkKey }));
+  const createClient = vi.fn((_key: string): ClaudeClient => ({ stream: async () => ({ text: '', toolCalls: [] }), checkKey }));
   const openOptions = vi.fn(async (_hash?: string) => {});
   const serve = createMessageHandler({
     getApiKey,

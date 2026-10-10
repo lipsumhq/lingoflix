@@ -8,7 +8,10 @@ export const DONATION_COPY = "It's free forever. A coffee keeps it going.";
 
 /** Spec §7.1: one constant for the model. */
 export const CLAUDE_MODEL = 'claude-sonnet-5-5';
+/** Follow-up answers (main spec §7.1). */
 export const CLAUDE_MAX_TOKENS = 1024;
+/** Explanations: room for the suggest_saves call after the text (v2 spec §5.1). */
+export const CLAUDE_EXPLAIN_MAX_TOKENS = 1536;
 export const CLAUDE_API_BASE_URL = 'https://api.anthropic.com';
 /** Spec §7.4: a stream silent this long is treated as a network failure. */
 export const CLAUDE_IDLE_TIMEOUT_MS = 30_000;

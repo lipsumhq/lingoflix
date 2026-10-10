@@ -110,7 +110,7 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
 
     armIdleTimer();
     try {
-      const text = await deps.createClient(apiKey).streamText(
+      const { text } = await deps.createClient(apiKey).stream(
         { model: CLAUDE_MODEL, maxTokens: CLAUDE_MAX_TOKENS, system, messages },
         (delta) => {
           armIdleTimer();
