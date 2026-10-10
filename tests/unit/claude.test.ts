@@ -25,19 +25,20 @@ describe('buildSystemPrompt', () => {
       'You are a language tutor helping a learner understand dialogue from a show or film they are watching on Netflix. Write your entire answer in Korean (한국어); quote words from the original line in their original language.',
     );
     expect(prompt).toContain('Text in square brackets is a sound description or speaker label, not dialogue.');
-    expect(prompt).toContain('Be concise — the learner has paused the video.');
+    expect(prompt).toContain('Be concise: the learner has paused the video. Do not use em dashes; use a colon or a comma instead. ');
     expect(prompt.endsWith(
       'with headings written in Korean (한국어):\n' +
-        '1. Meaning — natural translation plus what the line means in this scene: tone, nuance, sarcasm, slang, register.\n' +
-        '2. Key expressions — idioms, phrasal verbs, slang in the line, each with a short definition.\n' +
-        '3. How to use it — 2–3 everyday example sentences in the original language, each with a translation.',
+        '1. Meaning: natural translation plus what the line means in this scene: tone, nuance, sarcasm, slang, register.\n' +
+        '2. Key expressions: idioms, phrasal verbs, slang in the line, each with a short definition.\n' +
+        '3. How to use it: 2 or 3 everyday example sentences in the original language, each with a translation.',
     )).toBe(true);
+    expect(prompt).not.toMatch(/[\u2013\u2014]/);
   });
 
   it('lists only the enabled sections, and falls back to Meaning when none are', () => {
-    expect(buildSystemPrompt('en', { ...ALL, meaning: false, keyExpressions: false })).toMatch(/written in English:\n1\. How to use it — /);
+    expect(buildSystemPrompt('en', { ...ALL, meaning: false, keyExpressions: false })).toMatch(/written in English:\n1\. How to use it: /);
     const none = buildSystemPrompt('en', { meaning: false, keyExpressions: false, howToUse: false, followUp: true });
-    expect(none).toMatch(/written in English:\n1\. Meaning — /);
+    expect(none).toMatch(/written in English:\n1\. Meaning: /);
     expect(none).not.toContain('2.');
   });
 
@@ -57,7 +58,7 @@ describe('user message', () => {
     };
     expect(buildUserMessage(request)).toBe(
       [
-        'Title: Stranger Things — Season 1, Episode 3 "Holly, Jolly"',
+        'Title: Stranger Things, Season 1, Episode 3 "Holly, Jolly"',
         'Dialogue (the line to explain is marked with >>>):',
         '  Where are you going?',
         '  Home.',
@@ -69,7 +70,7 @@ describe('user message', () => {
 
   it('names movies and incomplete titles', () => {
     expect(titleLine({ ...EPISODE, kind: 'movie', seriesTitle: 'Roma', seasonNumber: null, episodeNumber: null, episodeTitle: null })).toBe('Movie: Roma');
-    expect(titleLine({ ...EPISODE, seasonNumber: null, episodeTitle: null })).toBe('Title: Stranger Things — Episode 3');
+    expect(titleLine({ ...EPISODE, seasonNumber: null, episodeTitle: null })).toBe('Title: Stranger Things, Episode 3');
     expect(titleLine({ ...EPISODE, seasonNumber: null, episodeNumber: null, episodeTitle: null })).toBe('Title: Stranger Things');
     expect(titleLine(null)).toBe('Title: unknown');
   });

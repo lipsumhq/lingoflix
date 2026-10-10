@@ -8,7 +8,7 @@ export default defineConfig({
   autoIcons: { baseIconPath: 'assets/icon.svg' },
   vite: () => ({ plugins: [tailwindcss()] }),
   manifest: {
-    name: 'LingoFlix — Understand every line on Netflix',
+    name: 'LingoFlix: Understand every line on Netflix',
     short_name: 'LingoFlix',
     description:
       'Understand every line on Netflix: custom shortcuts, subtitle toggle and AI explanations. Not affiliated with Netflix.',

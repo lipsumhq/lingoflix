@@ -34,7 +34,7 @@ The extension works with only Netflix and an Anthropic API key — no LingoFlix 
 
 ## 4. Users and distribution
 
-- Published to the Chrome Web Store as **"LingoFlix — Understand every line on Netflix"**, open source (MIT), like SiteBlocker.
+- Published to the Chrome Web Store as **"LingoFlix: Understand every line on Netflix"**, open source (MIT), like SiteBlocker.
 - Listing and About text include: "Not affiliated with or endorsed by Netflix."
 - Free. Users bring their own Anthropic API key and pay Anthropic directly for usage.
 
@@ -96,9 +96,9 @@ Opening via the **Explain line** shortcut follows the same flow from step 3, app
 Card contents (Markdown rendered with `react-markdown`, no raw HTML):
 - The line itself.
 - Sections, each toggleable in Settings (all default on):
-  - **Meaning** — natural translation plus what the line means in this scene: tone, nuance, sarcasm, slang, register.
-  - **Key expressions** — idioms, phrasal verbs, slang in the line, each with a short definition.
-  - **How to use it** — 2–3 everyday example sentences in the original language, each with a translation.
+  - **Meaning**: natural translation plus what the line means in this scene: tone, nuance, sarcasm, slang, register.
+  - **Key expressions**: idioms, phrasal verbs, slang in the line, each with a short definition.
+  - **How to use it**: 2 or 3 everyday example sentences in the original language, each with a translation.
   - **Follow-up box** (§5.4).
 - Buttons: Shadow (§5.6) and Regenerate, with Lucide icons (no emoji, §5.10).
 
@@ -248,12 +248,12 @@ Settings are read through one typed module that fills defaults for missing field
 
 **System prompt** (assembled from enabled sections):
 
-> You are a language tutor helping a learner understand dialogue from a show or film they are watching on Netflix. Write your entire answer in {explanation language}; quote words from the original line in their original language. Use the surrounding dialogue and the title information to work out the speaker, the tone, and what the line actually means in this scene. Text in square brackets is a sound description or speaker label, not dialogue. Be concise — the learner has paused the video. Use Markdown with exactly these sections, in this order, with headings written in {explanation language}: {enabled section list with one-sentence descriptions from §5.3}.
+> You are a language tutor helping a learner understand dialogue from a show or film they are watching on Netflix. Write your entire answer in {explanation language}; quote words from the original line in their original language. Use the surrounding dialogue and the title information to work out the speaker, the tone, and what the line actually means in this scene. Text in square brackets is a sound description or speaker label, not dialogue. Be concise: the learner has paused the video. Do not use em dashes; use a colon or a comma instead. Use Markdown with exactly these sections, in this order, with headings written in {explanation language}: {enabled section list with one-sentence descriptions from §5.3}.
 
 **User message:**
 
 ```
-Title: Stranger Things — Season 1, Episode 3 "Holly, Jolly"   (or: Movie: <title>)
+Title: Stranger Things, Season 1, Episode 3 "Holly, Jolly"   (or: Movie: <title>)
 Dialogue (the line to explain is marked with >>>):
   <up to 6 lines before>
 >>> I'm gonna call it a night.
