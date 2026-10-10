@@ -9,6 +9,7 @@ class FakePlayer implements NetflixPlayer {
     public time = 60_000,
     public duration = 1_200_000,
     public paused = false,
+    public movieId?: number,
   ) {}
   seek(t: number) {
     this.time = t;
@@ -28,6 +29,20 @@ class FakePlayer implements NetflixPlayer {
   isPaused() {
     return this.paused;
   }
+  getMovieId() {
+    return this.movieId;
+  }
+}
+
+function expectUnavailable(fn: () => unknown) {
+  let error: unknown;
+  try {
+    fn();
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBeInstanceOf(BridgeError);
+  expect((error as BridgeError).code).toBe('player-unavailable');
 }
 
 function fakeNetflix(players: Record<string, NetflixPlayer>) {
@@ -57,7 +72,7 @@ function connect(netflixRef: { current: unknown }, videoId: string | null = '810
   const stop = serveBridge(
     target,
     createPlayerMethods(
-      () => findPlayer(netflixRef.current),
+      () => findPlayer(netflixRef.current, videoId),
       () => videoId,
     ),
   );
@@ -95,6 +110,38 @@ describe('findPlayer', () => {
   it('throws player-unavailable when getAPI itself throws', () => {
     const broken = { appContext: { state: { playerApp: { getAPI: () => { throw new Error('boom'); } } } } };
     expect(() => findPlayer(broken)).toThrowError(/player/i);
+  });
+
+  it('never falls back to a non-watch session (e.g. a billboard preview)', () => {
+    expectUnavailable(() => findPlayer(fakeNetflix({ 'motion-billboard-1': new FakePlayer() })));
+  });
+
+  it('prefers the watch session playing the video in the URL', () => {
+    const stale = new FakePlayer(1, 1_000_000, false, 111);
+    const current = new FakePlayer(2, 1_000_000, false, 222);
+    expect(findPlayer(fakeNetflix({ 'watch-a': stale, 'watch-b': current }), '222')).toBe(current);
+    expect(findPlayer(fakeNetflix({ 'watch-b': current, 'watch-a': stale }), '222')).toBe(current);
+  });
+
+  it('falls back to the newest watch session when none matches the URL', () => {
+    const older = new FakePlayer(1);
+    const newer = new FakePlayer(2);
+    expect(findPlayer(fakeNetflix({ 'watch-a': older, 'watch-b': newer }), '999')).toBe(newer);
+  });
+
+  it('throws player-unavailable when the player lacks a required method (Netflix renamed it)', () => {
+    for (const method of ['seek', 'play', 'pause', 'getCurrentTime', 'getDuration', 'isPaused']) {
+      const player = new FakePlayer();
+      (player as unknown as Record<string, unknown>)[method] = undefined;
+      expectUnavailable(() => findPlayer(fakeNetflix({ 'watch-1': player })));
+    }
+  });
+
+  it('throws player-unavailable when the session API changed shape', () => {
+    const renamed = {
+      appContext: { state: { playerApp: { getAPI: () => ({ videoPlayer: { getSessionIds: () => ['watch-1'] } }) } } },
+    };
+    expectUnavailable(() => findPlayer(renamed));
   });
 });
 
@@ -156,6 +203,28 @@ describe('bridge round trip', () => {
     expect((await client.call('getState')).currentTimeMs).toBe(20_000);
   });
 
+  it('refuses to seek before the player knows its position and duration', async () => {
+    for (const [time, duration] of [
+      [60_000, 0],
+      [Number.NaN, 1_000_000],
+      [60_000, Number.NaN],
+    ] as const) {
+      const player = new FakePlayer(time, duration);
+      const client = connect({ current: fakeNetflix({ 'watch-1': player }) });
+      await expect(client.call('seekBy', 5_000)).rejects.toMatchObject({ code: 'player-unavailable' });
+      await expect(client.call('seek', 5_000)).rejects.toMatchObject({ code: 'player-unavailable' });
+      expect(player.time).toBe(time);
+    }
+  });
+
+  it('rejects non-finite seek arguments', async () => {
+    const player = new FakePlayer(60_000);
+    const client = connect({ current: fakeNetflix({ 'watch-1': player }) });
+    await expect(client.call('seekBy', Number.NaN)).rejects.toMatchObject({ code: 'bad-request' });
+    await expect(client.call('seek', Number.POSITIVE_INFINITY)).rejects.toMatchObject({ code: 'bad-request' });
+    expect(player.time).toBe(60_000);
+  });
+
   it('rejects with player-unavailable when Netflix has no player', async () => {
     const client = connect({ current: undefined });
     await expect(client.call('seekBy', 1000)).rejects.toMatchObject({ code: 'player-unavailable' });
@@ -181,5 +250,31 @@ describe('bridge round trip', () => {
       { id: 'explode', ok: false, code: 'bad-request', message: 'Unknown method explode' },
       { id: 'toString', ok: false, code: 'bad-request', message: 'Unknown method toString' },
     ]);
+  });
+});
+
+describe('callSync', () => {
+  it('returns the result within the same call, because DOM event dispatch is synchronous', () => {
+    const player = new FakePlayer(60_000);
+    const client = connect({ current: fakeNetflix({ 'watch-1': player }) });
+    expect(client.callSync('seekBy', -5_000)).toEqual({ ok: true, result: null });
+    expect(player.time).toBe(55_000);
+    const state = client.callSync('getState');
+    expect(state.ok && state.result.currentTimeMs).toBe(55_000);
+  });
+
+  it('reports the bridge error code', () => {
+    const client = connect({ current: undefined });
+    const res = client.callSync('seekBy', 1_000);
+    expect(res.ok).toBe(false);
+    expect(!res.ok && res.error).toBeInstanceOf(BridgeError);
+    expect(!res.ok && res.error.code).toBe('player-unavailable');
+  });
+
+  it('reports timeout immediately when no bridge is listening', () => {
+    const client = createBridgeClient(new EventTarget(), 20);
+    cleanups.push(() => client.dispose());
+    const res = client.callSync('getState');
+    expect(!res.ok && res.error.code).toBe('timeout');
   });
 });

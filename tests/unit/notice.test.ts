@@ -29,3 +29,13 @@ describe('notifier', () => {
     expect(box()!.textContent).toBe('other');
   });
 });
+
+describe('notifier dispose', () => {
+  it('removes the notice from the page', () => {
+    const n = createNotifier(document);
+    n.show('hello');
+    expect(document.getElementById('lingoflix-notice-host')).not.toBeNull();
+    n.dispose();
+    expect(document.getElementById('lingoflix-notice-host')).toBeNull();
+  });
+});

@@ -1,6 +1,8 @@
 export interface Notifier {
   show(message: string, durationMs?: number): void;
   showOnce(key: string, message: string): void;
+  /** Remove the notice from the page. */
+  dispose(): void;
 }
 
 const HOST_ID = 'lingoflix-notice-host';
@@ -54,6 +56,10 @@ export function createNotifier(doc: Document): Notifier {
       if (shownKeys.has(key)) return;
       shownKeys.add(key);
       show(message);
+    },
+    dispose() {
+      clearTimeout(hideTimer);
+      doc.getElementById(HOST_ID)?.remove();
     },
   };
 }

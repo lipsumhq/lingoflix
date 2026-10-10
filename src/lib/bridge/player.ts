@@ -8,7 +8,10 @@ export interface NetflixPlayer {
   getCurrentTime(): number;
   getDuration(): number;
   isPaused(): boolean;
+  getMovieId?(): number | string | undefined;
 }
+
+const REQUIRED_PLAYER_METHODS = ['seek', 'play', 'pause', 'getCurrentTime', 'getDuration', 'isPaused'] as const;
 
 interface NetflixVideoPlayerApi {
   getAllPlayerSessionIds(): string[];
@@ -19,18 +22,35 @@ interface NetflixGlobal {
   appContext?: { state?: { playerApp?: { getAPI?(): { videoPlayer?: NetflixVideoPlayerApi } | undefined } } };
 }
 
-export function findPlayer(netflix: unknown): NetflixPlayer {
+function unavailable(message: string): never {
+  throw new BridgeError('player-unavailable', message);
+}
+
+/**
+ * Finds the player for the video being watched. Only `watch-*` sessions count (others are previews);
+ * among them, the one playing `videoId` wins, else the newest. Anything missing or renamed by Netflix
+ * is reported as player-unavailable so callers can fall back to Netflix's own keys.
+ */
+export function findPlayer(netflix: unknown, videoId: string | null = null): NetflixPlayer {
   let api: NetflixVideoPlayerApi | undefined;
+  let players: NetflixPlayer[];
   try {
     api = (netflix as NetflixGlobal | undefined)?.appContext?.state?.playerApp?.getAPI?.()?.videoPlayer;
-  } catch {
-    api = undefined;
+    if (!api) return unavailable('Netflix player API not found');
+    players = api
+      .getAllPlayerSessionIds()
+      .filter((id) => id.startsWith('watch'))
+      .map((id) => api!.getVideoPlayerBySessionId(id))
+      .filter((p): p is NetflixPlayer => !!p);
+  } catch (err) {
+    if (err instanceof BridgeError) throw err;
+    return unavailable(`Netflix player API changed: ${String(err)}`);
   }
-  if (!api) throw new BridgeError('player-unavailable', 'Netflix player API not found');
-  const ids = api.getAllPlayerSessionIds();
-  const id = ids.find((s) => s.startsWith('watch')) ?? ids[0];
-  const player = id ? api.getVideoPlayerBySessionId(id) : undefined;
-  if (!player) throw new BridgeError('player-unavailable', 'No active Netflix player session');
+  const player = players.find((p) => videoId !== null && String(p.getMovieId?.()) === videoId) ?? players.at(-1);
+  if (!player) return unavailable('No active Netflix watch session');
+  for (const method of REQUIRED_PLAYER_METHODS) {
+    if (typeof player[method] !== 'function') unavailable(`Netflix player has no ${method}()`);
+  }
   return player;
 }
 
@@ -42,15 +62,36 @@ export function clampTime(timeMs: number, durationMs: number): number {
   return Math.min(max, Math.max(0, Math.round(timeMs)));
 }
 
+function requireFinite(value: number, name: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new BridgeError('bad-request', `${name} must be a finite number`);
+  }
+  return value;
+}
+
+/** Current position and duration, or player-unavailable while Netflix is still loading. */
+function readyTimes(p: NetflixPlayer): { currentMs: number; durationMs: number } {
+  const currentMs = p.getCurrentTime();
+  const durationMs = p.getDuration();
+  if (!Number.isFinite(currentMs) || !Number.isFinite(durationMs) || durationMs <= END_GUARD_MS) {
+    unavailable('Netflix player is not ready');
+  }
+  return { currentMs, durationMs };
+}
+
 export function createPlayerMethods(getPlayer: () => NetflixPlayer, getVideoId: () => string | null): BridgeMethods {
   return {
     seekBy(deltaMs) {
+      requireFinite(deltaMs, 'deltaMs');
       const p = getPlayer();
-      p.seek(clampTime(p.getCurrentTime() + deltaMs, p.getDuration()));
+      const { currentMs, durationMs } = readyTimes(p);
+      p.seek(clampTime(currentMs + deltaMs, durationMs));
     },
     seek(timeMs) {
+      requireFinite(timeMs, 'timeMs');
       const p = getPlayer();
-      p.seek(clampTime(timeMs, p.getDuration()));
+      const { durationMs } = readyTimes(p);
+      p.seek(clampTime(timeMs, durationMs));
     },
     play() {
       getPlayer().play();

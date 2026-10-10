@@ -1,7 +1,8 @@
 import type { Settings } from '@/lib/settings';
 import { matchAction, type ActionId } from '@/lib/shortcuts';
 
-export type ActionHandlers = Partial<Record<ActionId, () => void>>;
+/** Return false when the action couldn't run (e.g. no player); the key then goes to Netflix. */
+export type ActionHandlers = Partial<Record<ActionId, () => boolean | void>>;
 
 export interface KeyboardDeps {
   /** Current settings, or null while they are still loading. */
@@ -36,15 +37,26 @@ export function createKeyboardHandlers(deps: KeyboardDeps) {
     event.stopImmediatePropagation();
   };
 
+  // Codes whose keydown went to Netflix, so the matching keyup goes there too.
+  const passedThrough = new Set<string>();
+
   return {
     onKeyDown(event: KeyboardEvent) {
       const action = resolve(event);
       if (!action) return;
+      if (event.repeat && NO_REPEAT.has(action)) {
+        swallow(event);
+        return;
+      }
+      if (deps.handlers[action]?.() === false) {
+        passedThrough.add(event.code);
+        return;
+      }
+      passedThrough.delete(event.code);
       swallow(event);
-      if (event.repeat && NO_REPEAT.has(action)) return;
-      deps.handlers[action]?.();
     },
     onKeyUp(event: KeyboardEvent) {
+      if (passedThrough.delete(event.code)) return;
       if (resolve(event)) swallow(event);
     },
   };

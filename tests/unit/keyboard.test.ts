@@ -133,6 +133,25 @@ describe('keyboard shortcuts', () => {
     expect(netflix).toHaveBeenCalledTimes(2);
   });
 
+  it('a handler returning false lets that press through to Netflix (keydown and keyup)', () => {
+    const { netflix, press } = setup({ handlers: { rewind: () => false } });
+    const down = press({ code: 'ArrowLeft', key: 'ArrowLeft' });
+    expect(down.defaultPrevented).toBe(false);
+    expect(netflix).toHaveBeenCalledTimes(2);
+  });
+
+  it('swallows again as soon as the handler succeeds (no lock-out after a failure)', () => {
+    let succeeds = false;
+    const rewind = vi.fn(() => succeeds);
+    const { netflix, press } = setup({ handlers: { rewind } });
+    press({ code: 'ArrowLeft', key: 'ArrowLeft' });
+    succeeds = true;
+    const down = press({ code: 'ArrowLeft', key: 'ArrowLeft' });
+    expect(rewind).toHaveBeenCalledTimes(2);
+    expect(down.defaultPrevented).toBe(true);
+    expect(netflix).toHaveBeenCalledTimes(2); // only the failed press reached Netflix
+  });
+
   it('uses remapped keys', () => {
     const { handlers, netflix, state, press } = setup();
     state.settings = {

@@ -11,7 +11,7 @@ export default defineContentScript({
     serveBridge(
       document,
       createPlayerMethods(
-        () => findPlayer((window as { netflix?: unknown }).netflix),
+        () => findPlayer((window as { netflix?: unknown }).netflix, parseWatchVideoId(location.pathname)),
         () => parseWatchVideoId(location.pathname),
       ),
     );
