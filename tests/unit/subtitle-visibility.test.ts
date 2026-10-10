@@ -16,7 +16,7 @@ describe('applySubtitlesHidden', () => {
     const styles = document.querySelectorAll('#lingoflix-subtitle-visibility');
     expect(styles).toHaveLength(1);
     expect(styles[0]!.textContent).toBe(
-      `html[${SUBTITLES_HIDDEN_ATTR}="hidden"] ${SUBTITLE_LAYER_SELECTOR} { visibility: hidden !important; }`,
+      `html[${SUBTITLES_HIDDEN_ATTR}="hidden"] ${SUBTITLE_LAYER_SELECTOR} { opacity: 0 !important; }`,
     );
   });
 

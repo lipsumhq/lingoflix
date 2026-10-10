@@ -74,7 +74,7 @@ Added 2026-10-10 at the user's request: jumping by sentence, not only by a fixed
 
 ### 5.2 Subtitle toggle
 
-- Toggling adds/removes a class on `<html>` that applies `visibility: hidden !important` to Netflix's subtitle layer. The subtitle DOM keeps updating, so "current line" still works while hidden.
+- Toggling adds/removes a class on `<html>` that applies `opacity: 0 !important` to Netflix's subtitle layer (not `visibility: hidden`: hidden text has no `innerText`, which would glue two-line subtitles together). The subtitle DOM keeps updating, so "current line" still works while hidden.
 - The hidden/shown state is persisted and applies to every episode until toggled again.
 - While subtitles are hidden, hover-to-explain is inactive (nothing to hover), but the Explain, Replay, and Shadow shortcuts still work — listen first, then check.
 

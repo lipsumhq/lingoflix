@@ -8,7 +8,7 @@ export function applySubtitlesHidden(doc: Document, hidden: boolean): void {
   if (!doc.getElementById(STYLE_ID)) {
     const style = doc.createElement('style');
     style.id = STYLE_ID;
-    style.textContent = `html[${SUBTITLES_HIDDEN_ATTR}="hidden"] ${SUBTITLE_LAYER_SELECTOR} { visibility: hidden !important; }`;
+    style.textContent = `html[${SUBTITLES_HIDDEN_ATTR}="hidden"] ${SUBTITLE_LAYER_SELECTOR} { opacity: 0 !important; }`;
     (doc.head ?? doc.documentElement).append(style);
   }
   if (hidden) doc.documentElement.setAttribute(SUBTITLES_HIDDEN_ATTR, 'hidden');
