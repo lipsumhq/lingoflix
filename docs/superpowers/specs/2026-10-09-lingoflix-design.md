@@ -46,8 +46,10 @@ All shortcuts are remappable in Settings. A binding is `{ code, ctrl, alt, shift
 
 | Action | Default | Behavior |
 |---|---|---|
-| Rewind | `ArrowLeft`, 5 s | Seek back N seconds (N configurable, 1–60) |
-| Forward | `ArrowRight`, 5 s | Seek forward N seconds (N configurable, 1–60) |
+| Rewind | `ArrowLeft`, 5 s | Seek back N seconds (N configurable, 1–60), or one line when Rewind's mode is **One line** (§5.1.1) |
+| Forward | `ArrowRight`, 5 s | Seek forward N seconds (N configurable, 1–60), or one line when Forward's mode is **One line** (§5.1.1) |
+| Previous line | `KeyA` | Seek to the start of the previous line (§5.1.1) |
+| Next line | `KeyD` | Seek to the start of the next line (§5.1.1) |
 | Show / hide subtitles | `KeyC` | Hide/show Netflix subtitles (§5.2) |
 | Replay line | `KeyR` | Seek to the start of the current line and play |
 | Explain line | `KeyE` | Open the explanation card for the current line (§5.3) |
@@ -58,6 +60,17 @@ Rules:
 - Shortcuts are ignored when focus is in an input, textarea, or contenteditable element (including LingoFlix's follow-up box), when the extension is disabled, or when not on a `/watch/` page.
 - The shortcut recorder in Settings refuses a binding already used by another LingoFlix action and shows a warning (not a block) when the binding overrides a Netflix default (`Space`, `Enter`, `KeyF`, `KeyM`, `KeyS`, `ArrowUp`, `ArrowDown`, `Escape`).
 - "Current line" = the subtitle currently displayed; if none is displayed (between lines or subtitles hidden), the most recently displayed line.
+
+#### 5.1.1 Line navigation
+
+Added 2026-10-10 at the user's request: jumping by sentence, not only by a fixed number of seconds.
+
+- Lines come from the captured subtitle file (§8.2) when it is valid; otherwise from the rolling history (lines already seen in this video, each starting 300 ms before it appeared).
+- **Previous line:** if a line is on screen, go to the start of the line before it; between lines, go to the start of the most recent line.
+- **Next line:** go to the start of the first line that starts after now.
+- Rewind and Forward each have a mode, **Seconds** (default) or **One line**. In One line mode they behave like Previous line / Next line.
+- Line jumps keep the current play/pause state, and holding the key repeats.
+- When there is no line to jump to (before the first line, or the next line is unknown because there is no subtitle file and it hasn't been seen yet), the jump falls back to the Rewind/Forward seconds.
 
 ### 5.2 Subtitle toggle
 
@@ -87,7 +100,7 @@ Card contents (Markdown rendered with `react-markdown`, no raw HTML):
   - **Key expressions** — idioms, phrasal verbs, slang in the line, each with a short definition.
   - **How to use it** — 2–3 everyday example sentences in the original language, each with a translation.
   - **Follow-up box** (§5.4).
-- Buttons: 🎤 Shadow (§5.6), ↻ Regenerate.
+- Buttons: Shadow (§5.6) and Regenerate, with Lucide icons (no emoji, §5.10).
 
 The card mounts inside Netflix's player container so it is visible in fullscreen, positioned above the subtitle line, constrained to the player, and scrolls internally if tall.
 
@@ -127,7 +140,7 @@ Every successful explanation is saved automatically.
 - **Delete** on an entry, an episode, a season, or a series (each with a confirmation dialog).
 - **Reset all** removes the entire Study Log after a confirmation dialog.
 
-**Storage:** `chrome.storage.local` with the `unlimitedStorage` permission, one key per entry (`log:{id}`), so saving or deleting one entry never rewrites the others. The Study Log never leaves the machine.
+**Storage:** `chrome.storage.local` with the `unlimitedStorage` permission, one key per entry (`log:{id}`), so saving or deleting one entry never rewrites the others, plus one lookup key per line (`logkey:{videoId}|{language}|{normalized line}` → id) so a hover costs one read. The Study Log never leaves the machine.
 
 ### 5.6 Voice shadowing
 
@@ -161,7 +174,7 @@ Two tabs plus one hidden route. Layout (§5.10): a top bar with the logo and pil
 - **Explanation language** — curated list of ~30 languages shown by native name; default from `chrome.i18n.getUILanguage()`.
 - **Card sections** — four toggles (Meaning, Key expressions, How to use it, Follow-up box).
 - **Pause on hover** toggle.
-- **Shortcuts** — one row per action: an icon tile, the binding as a keycap (click it, then press a key combo; "Pick a key" when unbound), **Clear** (✕); `– N s +` steppers for Rewind/Forward (the number can also be typed, 1–60); **Reset** (to defaults).
+- **Shortcuts** — one row per action: an icon tile, the binding as a keycap (click it, then press a key combo; "Pick a key" when unbound), **Clear** (✕); for Rewind/Forward a **Seconds / One line** switch and, in Seconds mode, a `– N s +` stepper (the number can also be typed, 1–60); **Reset** (to defaults).
 
 **Study Log tab:** §5.5.
 
@@ -178,7 +191,7 @@ Two tabs plus one hidden route. Layout (§5.10): a top bar with the logo and pil
 Benchmarked on Duolingo's qualities — friendly, chunky, bright, encouraging — without its brand assets (no owl, no Duolingo green, no Feather font) and without Netflix red.
 
 - **Color:** Popcorn yellow `#FFC800` primary with a darker edge (`#E0A800` light / `#B88A00` dark) and dark text on yellow (`#3A2E00`). Tokens live in `src/assets/tailwind.css` as `light-dark()` pairs.
-- **Appearance:** Light / Dark / System setting (`theme` in Settings, default `system`). System follows the OS live; Light/Dark pin it via `<html data-theme>`. Applies to the popup and options page. On-Netflix UI (notices, Plan 2's explanation card) always uses the dark tokens.
+- **Appearance:** Light / Dark / System setting (`theme` in Settings, default `system`). System follows the OS live; Light/Dark pin it via `<html data-theme>`. Applies to the popup and options page. On-Netflix UI (notices, the explanation card) always uses the dark tokens, sizes in px, and the font stack `ui-rounded, system-ui, sans-serif` (Nunito isn't loaded on Netflix: a shadow root can't use the extension's font files without exposing them to the page).
 - **Type:** Nunito (variable), bundled with the extension via `@fontsource-variable/nunito` — no font requests to Google. Headings 900, labels 800.
 - **Shapes:** 2 px borders, 16–18 px corner radius, cards instead of dividers.
 - **Buttons:** primary = yellow with a 4 px bottom edge that disappears when pressed; secondary = card-colored with a 2 px border and 3 px edge. Uppercase, letter-spaced labels. Keycaps and the stepper's –/+ use a thick bottom border. Edges on controls inside a tight container (segmented control, switch) are drawn inset so the control stays centered.
@@ -210,15 +223,15 @@ Pure logic lives in `src/lib/` with no Chrome or DOM dependencies where possible
 
 ### 6.3 Messaging
 
-- **Overlay ↔ page bridge:** `CustomEvent`s on `document` with a LingoFlix-specific event name, request/response correlated by id. Bridge requests: `seek(ms)`, `play()`, `pause()`, `getState()` → `{ currentTimeMs, paused, videoId }`. All bridge times are episode time — the clock Netflix's `seek()` takes (`getSegmentTime()`), which can differ from `getCurrentTime()` by a lead-in (`docs/netflix-internals.md`, "Two clocks"). Bridge events: `track-available({ language, url, format })`, `metadata({ videoId, kind, seriesId, seriesTitle, seasonNumber, episodeNumber, episodeTitle })`.
-- **Overlay ↔ background (explanations):** a `chrome.runtime` Port named `explain`. Overlay sends `{ type: "start", request }` or `{ type: "follow-up", entryId, conversation, question }`. Background sends `{ type: "delta", text }`, `{ type: "done", entryId }`, `{ type: "error", code, message }`. Disconnecting the port aborts the request.
+- **Overlay ↔ page bridge:** `CustomEvent`s on `document` with a LingoFlix-specific event name, request/response correlated by id. Bridge requests: `seek(ms)`, `play()`, `pause()`, `getState()` → `{ currentTimeMs, paused, videoId, textTrack }`, `getSubtitleSource()` → `{ videoId, trackId, language, url }`, `getTitle()` → title metadata. (Pulled on demand rather than pushed as events, so nothing is missed before the overlay listens; answers are shape-checked because they come from the page.) All bridge times are episode time — the clock Netflix's `seek()` takes (`getSegmentTime()`), which can differ from `getCurrentTime()` by a lead-in (`docs/netflix-internals.md`, "Two clocks").
+- **Overlay ↔ background (explanations):** a `chrome.runtime` Port named `explain`, one per request. Overlay sends `{ type: "start", request }` or `{ type: "follow-up", entryId, question, sections }`; the background rebuilds the conversation from the saved entry. Background sends `{ type: "delta", text }`, `{ type: "done", entry }` (the saved Study Log entry), `{ type: "error", code, message }`. Disconnecting the port aborts the request.
 - **Overlay ↔ background (other):** `chrome.runtime.sendMessage` for Study Log lookup, shadowing commands (`start`, `stop`, `play`, `discard`, forwarded to the offscreen document), and opening the options page.
 
 ### 6.4 Storage
 
 | Data | Area | Notes |
 |---|---|---|
-| Settings (enabled, theme, pauseOnHover, explanationLanguage, cardSections, shortcuts, seek seconds, subtitlesHidden) | `chrome.storage.sync` | small; follows the user's Chrome profile |
+| Settings (enabled, theme, pauseOnHover, explanationLanguage, cardSections, shortcuts, seek seconds, rewind/forward modes, subtitlesHidden) | `chrome.storage.sync` | small; follows the user's Chrome profile |
 | API key | `chrome.storage.local` (`apiKey`) | never synced; read only by background |
 | Study Log entries | `chrome.storage.local` (`log:{id}`) | `unlimitedStorage` |
 
@@ -235,7 +248,7 @@ Settings are read through one typed module that fills defaults for missing field
 
 **System prompt** (assembled from enabled sections):
 
-> You are a language tutor helping a learner understand dialogue from a show or film they are watching on Netflix. Write your entire answer in {explanation language}; quote words from the original line in their original language. Use the surrounding dialogue and the title information to work out the speaker, the tone, and what the line actually means in this scene. Be concise — the learner has paused the video. Use Markdown with exactly these sections, in this order, with headings written in {explanation language}: {enabled section list with one-sentence descriptions from §5.3}.
+> You are a language tutor helping a learner understand dialogue from a show or film they are watching on Netflix. Write your entire answer in {explanation language}; quote words from the original line in their original language. Use the surrounding dialogue and the title information to work out the speaker, the tone, and what the line actually means in this scene. Text in square brackets is a sound description or speaker label, not dialogue. Be concise — the learner has paused the video. Use Markdown with exactly these sections, in this order, with headings written in {explanation language}: {enabled section list with one-sentence descriptions from §5.3}.
 
 **User message:**
 
