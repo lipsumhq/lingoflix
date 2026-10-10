@@ -5,6 +5,7 @@ import { SUBTITLES_HIDDEN_ATTR } from '@/entrypoints/netflix.content/subtitle-vi
 import type { BridgeResult } from '@/lib/bridge/client';
 import { BridgeError } from '@/lib/bridge/protocol';
 import { DEFAULT_SETTINGS, type Settings } from '@/lib/settings';
+import type { ObservedLine } from '@/lib/subtitles/history';
 
 const teardowns: (() => void)[] = [];
 afterEach(() => {
@@ -21,10 +22,20 @@ function setup(initial: Settings = DEFAULT_SETTINGS) {
   const bridge = { callSync: vi.fn((..._args: unknown[]) => state.seekResult) };
   const notifier = { show: vi.fn(), showOnce: vi.fn(), dispose: vi.fn() };
   const updateSettings = vi.fn(async (fn: (s: Settings) => Settings) => (state.stored = fn(state.stored)));
+  const session = {
+    currentLine: vi.fn((): ObservedLine | null => null),
+    describe: vi.fn((line: ObservedLine) => ({
+      context: { before: [], after: [] },
+      timing: line.shownAtMs === null ? null : { startMs: line.shownAtMs - 300, endMs: null },
+      fromTrack: false,
+    })),
+    lineTarget: vi.fn((_direction: 'previous' | 'next'): number | null => null),
+  };
   const controller = createController({
     doc: document,
     bridge: bridge as never,
     notifier,
+    session,
     updateSettings,
     isWatchPage: () => true,
     getVideoId: () => '82028220',
@@ -51,7 +62,7 @@ function setup(initial: Settings = DEFAULT_SETTINGS) {
     document.body.dispatchEvent(new KeyboardEvent('keyup', init));
     return down;
   };
-  return { controller, bridge, notifier, updateSettings, netflix, state, press };
+  return { controller, bridge, notifier, session, updateSettings, netflix, state, press };
 }
 
 const unavailable: BridgeResult<void> = {
@@ -128,5 +139,63 @@ describe('content controller', () => {
     expect(notifier.dispose).toHaveBeenCalledTimes(1);
     controller.applySettings({ ...DEFAULT_SETTINGS, subtitlesHidden: true });
     expect(document.documentElement.hasAttribute(SUBTITLES_HIDDEN_ATTR)).toBe(false);
+  });
+
+  it('Previous/Next line (A/D) seek to the start of that line', () => {
+    const { bridge, session, press } = setup();
+    session.lineTarget.mockImplementation((direction) => (direction === 'previous' ? 19_000 : 25_000));
+    press('KeyA', 'a');
+    press('KeyD', 'd');
+    expect(bridge.callSync.mock.calls).toEqual([
+      ['seek', 19_000],
+      ['seek', 25_000],
+    ]);
+  });
+
+  it('in One line mode, ← and → jump by line', () => {
+    const { bridge, session, press } = setup({ ...DEFAULT_SETTINGS, rewindMode: 'line', forwardMode: 'line' });
+    session.lineTarget.mockReturnValue(30_000);
+    press('ArrowLeft');
+    press('ArrowRight');
+    expect(session.lineTarget.mock.calls).toEqual([['previous'], ['next']]);
+    expect(bridge.callSync.mock.calls).toEqual([
+      ['seek', 30_000],
+      ['seek', 30_000],
+    ]);
+  });
+
+  it('with no line to jump to, falls back to the Rewind/Forward seconds', () => {
+    const { bridge, press } = setup({ ...DEFAULT_SETTINGS, rewindSeconds: 3, forwardSeconds: 7 });
+    press('KeyA', 'a');
+    press('KeyD', 'd');
+    expect(bridge.callSync.mock.calls).toEqual([
+      ['seekBy', -3_000],
+      ['seekBy', 7_000],
+    ]);
+  });
+
+  it('Replay line (R) seeks to the start of the current line and plays', () => {
+    const { bridge, session, press } = setup();
+    session.currentLine.mockReturnValue({ text: 'Hi', normalized: 'Hi', shownAtMs: 19_300, hiddenAtMs: null });
+    press('KeyR', 'r');
+    expect(bridge.callSync.mock.calls).toEqual([['seek', 19_000], ['play']]);
+  });
+
+  it('Replay with no line yet says so, does not seek, and keeps R from Netflix', () => {
+    const { bridge, notifier, netflix, press } = setup();
+    const down = press('KeyR', 'r');
+    expect(bridge.callSync).not.toHaveBeenCalled();
+    expect(notifier.show).toHaveBeenCalledWith('No subtitle line yet.', 2000);
+    expect(down.defaultPrevented).toBe(true);
+    expect(netflix).not.toHaveBeenCalled();
+  });
+
+  it('a line jump hands the key to Netflix when the player cannot be reached', () => {
+    const { netflix, session, state, press } = setup();
+    session.lineTarget.mockReturnValue(19_000);
+    state.seekResult = unavailable;
+    const down = press('KeyA', 'a');
+    expect(down.defaultPrevented).toBe(false);
+    expect(netflix).toHaveBeenCalledTimes(2);
   });
 });
