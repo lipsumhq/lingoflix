@@ -84,10 +84,14 @@ const sameLine = (a: string, b: string) => normalizeLine(a).toLowerCase() === no
 
 /**
  * `system[2]`: what the learner saved and recently explained, most recent first (v2 spec §5.2), leaving out
- * the line being explained. Null when there is nothing to list.
+ * the line being explained and the items saved from it: Claude is told not to suggest saved items, and after
+ * Regenerate it must still suggest those so their rows show Saved (v2 spec §4.1). Null when there is nothing
+ * to list.
  */
 export function learningHistoryBlock(sources: HistorySources, excludeLine: string): string | null {
-  const items = newestFirst(sources.items).slice(0, HISTORY_ITEMS);
+  const items = newestFirst(sources.items)
+    .filter((i) => !sameLine(i.line, excludeLine))
+    .slice(0, HISTORY_ITEMS);
   const lines = newestFirst(sources.explanations)
     .filter((e) => !sameLine(e.phrase, excludeLine))
     .slice(0, HISTORY_LINES);

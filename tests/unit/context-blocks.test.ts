@@ -190,4 +190,22 @@ describe('learningHistoryBlock', () => {
     expect(learningHistoryBlock({ items: [], explanations: [] }, 'x')).toBeNull();
     expect(learningHistoryBlock({ items: [], explanations: [explanation({ phrase: 'Same.' })] }, 'Same.')).toBeNull();
   });
+
+  it('leaves out items saved from the line being explained, so Claude still suggests them after Regenerate (v2 spec §4.1)', () => {
+    const block = learningHistoryBlock(
+      {
+        items: [
+          item(),
+          item({ id: 'i2', type: 'word', text: 'gonna', meaning: 'going to', line: "  I'M GONNA\ncall it  a night. " }),
+          item({ id: 'i3', type: 'phrase', text: 'mouth breather', meaning: 'an idiot', line: 'Mouth breather.' }),
+        ],
+        explanations: [],
+      },
+      "i'm gonna call it a night.",
+    )!;
+    expect(block).not.toContain('call it a night');
+    expect(block).not.toContain('gonna');
+    expect(block.split('\n')).toEqual([HEADER, 'Saved:', '- mouth breather (phrase): an idiot [Stranger Things S1 E3]']);
+    expect(learningHistoryBlock({ items: [item()], explanations: [] }, "I'm gonna call it a night.")).toBeNull();
+  });
 });

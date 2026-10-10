@@ -194,6 +194,22 @@ describe('explain service: explanations', () => {
     expect(history.text).not.toContain(REQUEST.phrase);
   });
 
+  it("leaves this line's saved items out of the history, so Claude can suggest them again (Regenerate, v2 spec §4.1)", async () => {
+    const stored = await saveExplanation(STORED);
+    await saveItem(stored, { type: 'idiom', text: 'call it a night', meaning: '그만 자러 가다' });
+    const other = await saveExplanation({ ...STORED, phrase: 'Where is Will?', videoTimeMs: 600_000, suggestions: [] });
+    await saveItem(other, { type: 'phrase', text: 'Where is', meaning: 'asking for a place' });
+    const { client, calls } = fakeClient({ deltas: ['ok'] });
+    const { port, sent, send } = fakePort();
+    serveExplainPort(port, deps(client));
+    send({ type: 'start', request: { ...REQUEST, storySoFar: [{ startMs: 1_700_000, text: 'Old line' }] } });
+    await vi.waitFor(() => expect(sent.at(-1)?.type).toBe('done'));
+    const history = systemOf(calls[0]!)[2]!;
+    expect(history.cache).toBe(true);
+    expect(history.text).toContain('- Where is (phrase): asking for a place');
+    expect(history.text).not.toContain('call it a night');
+  });
+
   it('leaves out empty blocks, and caches the story and history but not the instructions', async () => {
     const bare = fakeClient({ deltas: ['ok'] });
     const a = fakePort();
