@@ -74,14 +74,24 @@ export function extractTextTracks(parsed: unknown): CapturedManifest | null {
   return { movieId: String(movieId), tracks: mergeTracks(lists.map(tracksFrom)) };
 }
 
-/** Both lists can describe the same tracks: keep each track once, preferring the entry that has files. */
-function mergeTracks(lists: CapturedTrack[][]): CapturedTrack[] {
-  const merged: CapturedTrack[] = [];
-  for (const list of lists) {
+/**
+ * Both lists can describe the same tracks. A track from a later list joins the earlier list's track
+ * that shares an id (keeping every id, and the files if only the later one has them); tracks within
+ * one list are never merged.
+ */
+function mergeTracks([first = [], ...rest]: CapturedTrack[][]): CapturedTrack[] {
+  const merged = [...first];
+  for (const list of rest) {
+    const earlier = merged.length;
     for (const track of list) {
-      const i = merged.findIndex((t) => t.ids.some((id) => track.ids.includes(id)));
-      if (i === -1) merged.push(track);
-      else if (merged[i]!.urls.length === 0 && track.urls.length > 0) merged[i] = track;
+      const i = merged.findIndex((t, at) => at < earlier && t.ids.some((id) => track.ids.includes(id)));
+      if (i === -1) {
+        merged.push(track);
+        continue;
+      }
+      const kept = merged[i]!;
+      const ids = [...kept.ids, ...track.ids.filter((id) => !kept.ids.includes(id))];
+      merged[i] = kept.urls.length === 0 && track.urls.length > 0 ? { ...track, ids } : { ...kept, ids };
     }
   }
   return merged;
@@ -156,19 +166,19 @@ function walkable(value: unknown): value is object {
 }
 
 /**
- * A bounded breadth-first search of Netflix's player memory for the manifest of `movieId`, in case
- * Netflix renames a step of the known path. Never throws.
+ * A bounded breadth-first search of Netflix's player memory for the manifest of `movieId` that lists
+ * subtitle files, in case Netflix renames a step of the known path. Never throws.
  */
 export function searchPlayerForManifest(player: unknown, movieId: string): CapturedManifest | undefined {
-  let root: unknown;
+  let level: object[];
   try {
-    root = internalPlayerOf(player);
+    const root = internalPlayerOf(player);
+    level = walkable(root) ? [root] : [];
   } catch {
     return undefined;
   }
   const seen = new Set<object>();
   let reads = 0;
-  let level: object[] = walkable(root) ? [root] : [];
   for (let depth = 0; depth <= SEARCH_LIMITS.depth && level.length > 0; depth++) {
     const next: object[] = [];
     for (const obj of level) {
@@ -177,8 +187,9 @@ export function searchPlayerForManifest(player: unknown, movieId: string): Captu
       seen.add(obj);
       try {
         reads++;
+        // A copy without any file is no use: keep looking.
         const found = manifestOf(obj, movieId);
-        if (found) return found;
+        if (found?.tracks.some((t) => t.urls.length > 0)) return found;
         const length = Array.isArray(obj) ? field(obj, 'length') : undefined;
         if (typeof length === 'number' && length > SEARCH_LIMITS.keysPerObject) continue;
         const keys = Object.getOwnPropertyNames(obj);
