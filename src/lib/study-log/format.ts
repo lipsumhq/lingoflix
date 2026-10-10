@@ -35,3 +35,8 @@ export function whereLabel(fields: Where & { seriesTitle: string }): string {
   const code = episodeCode(fields);
   return code ? `${fields.seriesTitle} ${code}` : fields.seriesTitle;
 }
+
+/** "1 saved item", "3 saved items". */
+export function savedItemsLabel(n: number): string {
+  return `${n} saved ${n === 1 ? 'item' : 'items'}`;
+}

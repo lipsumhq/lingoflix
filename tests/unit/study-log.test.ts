@@ -1,17 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { episodeCode, episodeLabel, formatTimestamp, seasonLabel, whereLabel } from '@/lib/study-log/format';
-import { groupStudyLog } from '@/lib/study-log/group';
 import {
   appendFollowUp,
-  deleteExplanations,
   findExplanation,
   getExplanation,
   listExplanations,
   resetStudyLog,
   saveExplanation,
 } from '@/lib/study-log/store';
-import { isSaveSuggestion, toExplanation, type Explanation, type NewExplanation } from '@/lib/study-log/types';
+import { isSaveSuggestion, toExplanation, type NewExplanation } from '@/lib/study-log/types';
 
 beforeEach(() => fakeBrowser.reset());
 
@@ -72,16 +70,6 @@ describe('explanation store', () => {
     ]);
     expect(after?.updatedAt).toBe('2026-10-12T00:00:00.000Z');
     expect(await appendFollowUp('missing', { question: 'Q', answer: 'A' })).toBeNull();
-  });
-
-  it('deletes explanations and their lookup keys only', async () => {
-    const next = ids();
-    const a = await saveExplanation(line({ phrase: 'A' }), undefined, next);
-    const b = await saveExplanation(line({ phrase: 'B' }), undefined, next);
-    await deleteExplanations([a.id]);
-    expect(await findExplanation(a.videoId, 'ko', 'A')).toBeNull();
-    expect(await getExplanation(a.id)).toBeNull();
-    expect(await findExplanation(b.videoId, 'ko', 'B')).toEqual(b);
   });
 
   it('Reset all removes the whole Study Log and nothing else', async () => {
@@ -169,66 +157,6 @@ describe('explanation records (v2 spec §3.1)', () => {
     );
     expect(again.suggestions).toEqual([{ type: 'idiom', text: 'call it a night', meaning: 'go to bed' }]);
     expect(await getExplanation(first.id)).toEqual(again);
-  });
-});
-
-const explanation = (over: Partial<Explanation>): Explanation => ({
-  id: 'x',
-  phrase: 'p',
-  response: 'r',
-  followUps: [],
-  videoTimeMs: 0,
-  savedAt: '2026-10-01T00:00:00.000Z',
-  updatedAt: '2026-10-01T00:00:00.000Z',
-  videoId: 'v',
-  kind: 'episode',
-  seriesId: 's',
-  seriesTitle: 'S',
-  seasonNumber: 1,
-  episodeNumber: 1,
-  episodeTitle: null,
-  context: { before: [], after: [] },
-  explanationLanguage: 'en',
-  model: 'claude-sonnet-5-5',
-  suggestions: [],
-  ...over,
-});
-
-describe('groupStudyLog', () => {
-  const st = { seriesId: 'st', seriesTitle: 'Stranger Things' };
-  const entries = [
-    explanation({ id: 'st-e3-late', ...st, videoId: 'e3', episodeNumber: 3, videoTimeMs: 2000, updatedAt: '2026-10-05T00:00:00Z' }),
-    explanation({ id: 'st-e3-early', ...st, videoId: 'e3', episodeNumber: 3, videoTimeMs: 1000, updatedAt: '2026-10-03T00:00:00Z' }),
-    explanation({ id: 'st-e1', ...st, videoId: 'e1', episodeNumber: 1, updatedAt: '2026-10-02T00:00:00Z' }),
-    explanation({ id: 'st-s2', ...st, videoId: 's2e1', seasonNumber: 2, episodeNumber: 1, updatedAt: '2026-10-01T00:00:00Z' }),
-    explanation({ id: 'dark', seriesId: 'dark', seriesTitle: 'Dark', videoId: 'd1', updatedAt: '2026-10-06T00:00:00Z' }),
-    explanation({ id: 'roma', kind: 'movie', seriesId: null, seriesTitle: 'Roma', videoId: 'm1', seasonNumber: null, episodeNumber: null, updatedAt: '2026-10-04T00:00:00Z' }),
-    explanation({ id: 'okja', kind: 'movie', seriesId: null, seriesTitle: 'Okja', videoId: 'm2', seasonNumber: null, episodeNumber: null, updatedAt: '2026-10-07T00:00:00Z' }),
-  ];
-
-  it('builds series → season → episode with counts, plus Movies, in the spec order', () => {
-    const tree = groupStudyLog(entries);
-    expect(tree.total).toBe(7);
-    expect(tree.series.map((s) => [s.title, s.count])).toEqual([
-      ['Dark', 1],
-      ['Stranger Things', 4],
-    ]);
-    const stranger = tree.series[1]!;
-    expect(stranger.seasons.map((s) => [s.seasonNumber, s.count])).toEqual([
-      [1, 3],
-      [2, 1],
-    ]);
-    expect(stranger.seasons[0]!.episodes.map((e) => e.episodeNumber)).toEqual([1, 3]);
-    expect(stranger.seasons[0]!.episodes[1]!.entries.map((e) => e.id)).toEqual(['st-e3-early', 'st-e3-late']);
-    expect(tree.movies.map((m) => m.title)).toEqual(['Okja', 'Roma']);
-  });
-
-  it('puts unnumbered seasons and episodes last', () => {
-    const tree = groupStudyLog([
-      explanation({ id: 'a', seasonNumber: null, episodeNumber: null, videoId: 'x' }),
-      explanation({ id: 'b', seasonNumber: 1, episodeNumber: 2, videoId: 'y' }),
-    ]);
-    expect(tree.series[0]!.seasons.map((s) => s.seasonNumber)).toEqual([1, null]);
   });
 });
 

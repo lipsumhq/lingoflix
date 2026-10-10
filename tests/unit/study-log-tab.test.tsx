@@ -1,13 +1,18 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { StudyLogTab } from '@/entrypoints/options/StudyLogTab';
-import { takePendingSeek } from '@/lib/pending-seek';
+import { MIGRATION_KEY, listItems, saveItem } from '@/lib/study-log/items';
 import { listExplanations, saveExplanation } from '@/lib/study-log/store';
-import type { NewExplanation } from '@/lib/study-log/types';
+import type { NewExplanation, SaveSuggestion } from '@/lib/study-log/types';
 
-beforeEach(() => fakeBrowser.reset());
+beforeEach(async () => {
+  fakeBrowser.reset();
+  // An install that has already moved to v2; the conversion test below removes this.
+  await fakeBrowser.storage.local.set({ [MIGRATION_KEY]: true });
+});
 afterEach(cleanup);
 
 const line = (over: Partial<NewExplanation>): NewExplanation => ({
@@ -28,105 +33,196 @@ const line = (over: Partial<NewExplanation>): NewExplanation => ({
   ...over,
 });
 
+async function save(over: Partial<NewExplanation>, suggestion: SaveSuggestion, savedAt: string) {
+  return saveItem(await saveExplanation(line(over)), suggestion, new Date(savedAt));
+}
+
+const NIGHT = { phrase: "I'm gonna call it a night.", videoTimeMs: 1_834_200 };
+const PILOT = { phrase: 'Pilot line', videoId: '80077209', episodeNumber: 1, episodeTitle: 'The Vanishing of Will Byers', videoTimeMs: 5000 };
+const ROMA = {
+  phrase: 'Movie line',
+  videoId: '80240715',
+  kind: 'movie' as const,
+  seriesId: null,
+  seriesTitle: 'Roma',
+  seasonNumber: null,
+  episodeNumber: null,
+  episodeTitle: null,
+};
+
+/** 5 saved items from 4 explanations: 3 in E3, 1 in E1, 1 in the movie Roma. */
 async function seed() {
-  await saveExplanation(line({ phrase: "I'm gonna call it a night.", videoTimeMs: 1_834_200 }));
-  await saveExplanation(line({ phrase: 'Where are you going?', videoTimeMs: 1000 }));
-  await saveExplanation(line({ phrase: 'Pilot line', videoId: '80077209', episodeNumber: 1, episodeTitle: 'The Vanishing of Will Byers' }));
-  await saveExplanation(
-    line({ phrase: 'Movie line', videoId: '80240715', kind: 'movie', seriesId: null, seriesTitle: 'Roma', seasonNumber: null, episodeNumber: null, episodeTitle: null }),
-  );
+  await save(ROMA, { type: 'phrase', text: 'Movie line', meaning: 'a line from a film' }, '2026-10-10T08:00:00Z');
+  await save(PILOT, { type: 'word', text: 'Pilot', meaning: 'first episode' }, '2026-10-10T09:00:00Z');
+  await save(NIGHT, { type: 'idiom', text: 'call it a night', meaning: 'stop for the evening' }, '2026-10-10T10:00:00Z');
+  await save({ phrase: 'Where are you going?', videoTimeMs: 1000 }, { type: 'line', text: 'Where are you going?', meaning: '' }, '2026-10-10T10:01:00Z');
+  await save(NIGHT, { type: 'word', text: 'gonna', meaning: 'going to (casual)' }, '2026-10-10T10:02:00Z');
+}
+
+const tree = () => screen.findByRole('navigation', { name: 'Shows and movies' });
+
+/** The texts of the rows in the Saved items list, in order. */
+async function rowTexts(): Promise<(string | null | undefined)[]> {
+  const list = await screen.findByRole('list', { name: 'Saved items' });
+  return within(list)
+    .getAllByRole('listitem')
+    .map((li) => li.querySelector('[data-item-text]')?.textContent);
+}
+
+/** The row button whose text is `text`. */
+async function rowButton(text: string): Promise<HTMLElement> {
+  const list = await screen.findByRole('list', { name: 'Saved items' });
+  const button = within(list)
+    .getAllByRole('button')
+    .find((b) => b.querySelector('[data-item-text]')?.textContent === text);
+  if (!button) throw new Error(`No row for ${text}`);
+  return button;
 }
 
 describe('Study Log tab', () => {
-  it('invites a first explanation when empty', async () => {
+  it('invites a first save when empty', async () => {
     render(<StudyLogTab />);
-    expect(await screen.findByText('Nothing here yet')).toBeTruthy();
+    expect(await screen.findByText('Nothing saved yet')).toBeTruthy();
+    expect(screen.getByText('Hover a line on Netflix and save words, phrases, idioms or whole lines.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reset all' })).toBeNull();
   });
 
-  it('shows series → season → episode with counts, and the selected episode’s lines in time order', async () => {
+  it('opens on All items, newest first, with where each item is from', async () => {
     await seed();
     render(<StudyLogTab />);
-    const tree = await screen.findByRole('navigation', { name: 'Shows and movies' });
-    expect(within(tree).getByText('Stranger Things')).toBeTruthy();
-    expect(within(tree).getByText('Season 1')).toBeTruthy();
-    expect(within(tree).getByRole('button', { name: 'Roma, 1 line' })).toBeTruthy();
-    expect(await screen.findByText('Pilot line')).toBeTruthy(); // first episode selected by default
-    fireEvent.click(within(tree).getByRole('button', { name: 'E3 · Holly, Jolly, 2 lines' }));
-    const lines = await screen.findByRole('list', { name: 'Explained lines' });
-    const items = within(lines).getAllByRole('listitem');
-    expect(items.map((li) => li.querySelector('p')?.textContent)).toEqual(['Where are you going?', "I'm gonna call it a night."]);
-    expect(within(items[0]!).getByText('0:01')).toBeTruthy();
-    expect(within(items[1]!).getByText('30:34')).toBeTruthy();
+    expect(await rowTexts()).toEqual(['gonna', 'Where are you going?', 'call it a night', 'Pilot', 'Movie line']);
+    expect(within(await tree()).getByRole('button', { name: 'All items, 5 saved items' }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByText('Words, phrases, idioms and lines you saved.')).toBeTruthy();
+    const first = within(screen.getByRole('list', { name: 'Saved items' })).getAllByRole('listitem')[0]!;
+    expect(within(first).getByText('Word')).toBeTruthy();
+    expect(within(first).getByText('going to (casual)')).toBeTruthy();
+    expect(within(first).getByText('Stranger Things S1 E3 30:34')).toBeTruthy();
   });
 
-  it('counts lines on the series and season rows too', async () => {
+  it('shows series → season → episode with saved-item counts, and an episode’s items in line order', async () => {
     await seed();
     render(<StudyLogTab />);
-    const tree = await screen.findByRole('navigation', { name: 'Shows and movies' });
-    const seriesRow = within(tree).getByText('Stranger Things').parentElement!;
-    expect(within(seriesRow).getByText('3')).toBeTruthy();
-    expect(within(seriesRow).getByText('3 lines')).toBeTruthy();
-    const seasonRow = within(tree).getByText('Season 1').parentElement!;
-    expect(within(seasonRow).getByText('3')).toBeTruthy();
-    expect(within(seasonRow).getByText('3 lines')).toBeTruthy();
+    const nav = await tree();
+    const seriesRow = within(nav).getByText('Stranger Things').parentElement!;
+    expect(within(seriesRow).getByText('4')).toBeTruthy();
+    expect(within(seriesRow).getByText('4 saved items')).toBeTruthy();
+    const seasonRow = within(nav).getByText('Season 1').parentElement!;
+    expect(within(seasonRow).getByText('4 saved items')).toBeTruthy();
+
+    fireEvent.click(within(nav).getByRole('button', { name: 'E3 · Holly, Jolly, 3 saved items' }));
+    await waitFor(async () => expect(await rowTexts()).toEqual(['Where are you going?', 'call it a night', 'gonna']));
+    const rows = within(screen.getByRole('list', { name: 'Saved items' })).getAllByRole('listitem');
+    expect(within(rows[0]!).getByText('S1 E3 0:01')).toBeTruthy();
+
+    fireEvent.click(within(nav).getByRole('button', { name: 'Roma, 1 saved item' }));
+    expect(await screen.findByText('Roma 0:01')).toBeTruthy();
   });
 
-  it('expands an explanation', async () => {
+  it('filters by type and searches text and meaning; Clear filters brings everything back', async () => {
     await seed();
     render(<StudyLogTab />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Show explanation' }));
-    expect(screen.getByRole('heading', { name: 'Meaning' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Hide explanation' })).toBeTruthy();
+    await rowTexts();
+    fireEvent.click(screen.getByRole('radio', { name: 'Idioms' }));
+    expect(await rowTexts()).toEqual(['call it a night']);
+    fireEvent.click(screen.getByRole('radio', { name: 'All' }));
+    const search = screen.getByRole('searchbox', { name: 'Search saved items' });
+    fireEvent.change(search, { target: { value: 'EVENING' } });
+    expect(await rowTexts()).toEqual(['call it a night']);
+    fireEvent.change(search, { target: { value: 'zzz' } });
+    expect(await screen.findByText('Nothing matches.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(await rowTexts()).toHaveLength(5);
+    expect(screen.getByRole('radio', { name: 'All' }).getAttribute('aria-checked')).toBe('true');
+    expect((screen.getByRole('searchbox', { name: 'Search saved items' }) as HTMLInputElement).value).toBe('');
   });
 
-  it('Open at this moment leaves a pending seek and opens the episode on Netflix', async () => {
-    await seed();
-    const create = vi.spyOn(fakeBrowser.tabs, 'create');
-    render(<StudyLogTab />);
-    fireEvent.click(within(await screen.findByRole('navigation', { name: 'Shows and movies' })).getByRole('button', { name: 'E3 · Holly, Jolly, 2 lines' }));
-    const night = (await screen.findByText("I'm gonna call it a night.")).closest('li')!;
-    fireEvent.click(within(night).getByRole('button', { name: 'Open at this moment' }));
-    await waitFor(() => expect(create).toHaveBeenCalledWith({ url: 'https://www.netflix.com/watch/80077211' }));
-    expect(await takePendingSeek('80077211')).toBe(1_834_200);
-  });
-
-  it('deleting a line asks first; Cancel keeps it', async () => {
+  it('deleting an episode asks first and removes its saved items only', async () => {
     await seed();
     render(<StudyLogTab />);
-    const pilot = (await screen.findByText('Pilot line')).closest('li')!;
-    fireEvent.click(within(pilot).getByRole('button', { name: 'Delete line' }));
-    const dialog = screen.getByRole('alertdialog', { name: 'Delete this line?' });
+    fireEvent.click(within(await tree()).getByRole('button', { name: 'E3 · Holly, Jolly, 3 saved items' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete episode' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete episode?' });
+    expect(within(dialog).getByText('All 3 saved items from this episode will be removed. Explanations stay in your history.')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(await listExplanations()).toHaveLength(4);
-    fireEvent.click(within(pilot).getByRole('button', { name: 'Delete line' }));
+    expect(await listItems()).toHaveLength(5);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete episode' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
-    await waitFor(async () => expect(await listExplanations()).toHaveLength(3));
-    await waitFor(() => expect(screen.queryByText('Pilot line')).toBeNull());
+    await waitFor(async () => expect((await listItems()).map((i) => i.text).sort()).toEqual(['Movie line', 'Pilot']));
+    expect(await listExplanations()).toHaveLength(4);
   });
 
-  it('deletes a whole season after confirming', async () => {
+  it('deletes a whole season from the tree after confirming', async () => {
     await seed();
     render(<StudyLogTab />);
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Stranger Things Season 1' }));
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
-    await waitFor(async () => expect((await listExplanations()).map((e) => e.phrase)).toEqual(['Movie line']));
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete Stranger Things Season 1?' });
+    expect(within(dialog).getByText('All 4 saved items from this season will be removed. Explanations stay in your history.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(async () => expect((await listItems()).map((i) => i.text)).toEqual(['Movie line']));
   });
 
-  it('Reset all empties the Study Log after confirming', async () => {
+  it('deletes a whole show from the tree after confirming, keeping its explanations', async () => {
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Stranger Things' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete Stranger Things?' });
+    expect(within(dialog).getByText('All 4 saved items from this show will be removed. Explanations stay in your history.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(async () => expect((await listItems()).map((i) => i.text)).toEqual(['Movie line']));
+    expect(await listExplanations()).toHaveLength(4);
+    expect(await rowTexts()).toEqual(['Movie line']);
+  });
+
+  it('Reset all clears saved items and explanation history after confirming', async () => {
     await seed();
     render(<StudyLogTab />);
     fireEvent.click(await screen.findByRole('button', { name: 'Reset all' }));
     const dialog = screen.getByRole('alertdialog', { name: 'Reset your Study Log?' });
+    expect(within(dialog).getByText("Every saved item and every explanation in your history will be removed. This can't be undone.")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Reset all' }));
-    expect(await screen.findByText('Nothing here yet')).toBeTruthy();
+    expect(await screen.findByText('Nothing saved yet')).toBeTruthy();
+    expect(await listItems()).toEqual([]);
     expect(await listExplanations()).toEqual([]);
   });
 
-  it('shows a line saved from a Netflix tab without reloading', async () => {
+  it('offers Reset all when only explanation history is left', async () => {
+    await saveExplanation(line({ phrase: 'Explained, never saved' }));
     render(<StudyLogTab />);
-    await screen.findByText('Nothing here yet');
-    await saveExplanation(line({ phrase: 'Fresh line' }));
-    expect(await screen.findByText('Fresh line')).toBeTruthy();
+    expect(await screen.findByText('Nothing saved yet')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reset all' })).toBeTruthy();
+  });
+
+  it('turns explanations from before v2 into saved lines the first time it opens, once', async () => {
+    await fakeBrowser.storage.local.remove(MIGRATION_KEY);
+    // As the Study Log stored it before v2: no `suggestions` field.
+    const { suggestions: _none, ...preV2 } = await saveExplanation(line({ phrase: 'Old line' }));
+    await fakeBrowser.storage.local.set({ [`log:${preV2.id}`]: preV2 });
+    // StrictMode, as on the options page, runs the effect twice: the line must still be saved only once.
+    render(
+      <StrictMode>
+        <StudyLogTab />
+      </StrictMode>,
+    );
+    expect(await rowTexts()).toEqual(['Old line']);
+    const row = within(screen.getByRole('list', { name: 'Saved items' })).getAllByRole('listitem')[0]!;
+    expect(within(row).getByText('Line')).toBeTruthy();
+    expect(await listItems()).toHaveLength(1);
+  });
+
+  it('shows an item saved from a Netflix tab without reloading', async () => {
+    render(<StudyLogTab />);
+    await screen.findByText('Nothing saved yet');
+    await save({ phrase: 'Fresh line' }, { type: 'line', text: 'Fresh line', meaning: '' }, '2026-10-10T11:00:00Z');
+    expect(await rowTexts()).toEqual(['Fresh line']);
+  });
+
+  it('selecting a row marks it as current', async () => {
+    await seed();
+    render(<StudyLogTab />);
+    const pilot = await rowButton('Pilot');
+    fireEvent.click(pilot);
+    expect(pilot.getAttribute('aria-current')).toBe('true');
+    expect((await rowButton('gonna')).getAttribute('aria-current')).toBeNull();
   });
 });

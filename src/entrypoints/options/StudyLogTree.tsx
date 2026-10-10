@@ -1,16 +1,17 @@
 import { Film, Trash2 } from 'lucide-react';
 import { focusRing } from '@/components/styles';
-import { episodeLabel, seasonLabel } from '@/lib/study-log/format';
+import { episodeLabel, savedItemsLabel, seasonLabel } from '@/lib/study-log/format';
 import type { SeasonNode, SeriesNode, StudyLogTree as Tree } from '@/lib/study-log/group';
 
-const lines = (n: number) => `${n} ${n === 1 ? 'line' : 'lines'}`;
+/** The tree node that lists every saved item, newest first (v2 spec §6.1). */
+export const ALL_ITEMS = 'all-items';
 
 const countPill = 'ml-auto rounded-full bg-soft px-2 text-[11px] font-extrabold text-mute';
 const trashButton = `grid size-7 shrink-0 place-items-center rounded-lg text-mute hover:bg-soft hover:text-danger ${focusRing}`;
 
 interface StudyLogTreeProps {
   tree: Tree;
-  selected: string | null;
+  selected: string;
   onSelect(key: string): void;
   onDeleteSeries(series: SeriesNode): void;
   onDeleteSeason(series: SeriesNode, season: SeasonNode): void;
@@ -20,7 +21,7 @@ function NodeButton({ label, count, active, onClick }: { label: string; count: n
   return (
     <button
       type="button"
-      aria-label={`${label}, ${lines(count)}`}
+      aria-label={`${label}, ${savedItemsLabel(count)}`}
       aria-current={active ? 'true' : undefined}
       onClick={onClick}
       className={`flex w-full items-center gap-2 rounded-xl border-2 px-2.5 py-1.5 text-left text-sm font-bold ${focusRing} ${
@@ -35,22 +36,23 @@ function NodeButton({ label, count, active, onClick }: { label: string; count: n
   );
 }
 
-/** A row's line count: the pill is what you see, "N lines" is what a screen reader says. */
+/** A row's count: the pill is what you see, "N saved items" is what a screen reader says. */
 function Count({ n }: { n: number }) {
   return (
     <>
       <span aria-hidden="true" className={countPill}>
         {n}
       </span>
-      <span className="sr-only">{lines(n)}</span>
+      <span className="sr-only">{savedItemsLabel(n)}</span>
     </>
   );
 }
 
-/** Spec §5.5: Series → Season → Episode with counts, plus Movies. */
+/** v2 spec §6.1: All items, then Series → Season → Episode with saved-item counts, plus Movies. */
 export function StudyLogTree({ tree, selected, onSelect, onDeleteSeries, onDeleteSeason }: StudyLogTreeProps) {
   return (
     <nav aria-label="Shows and movies" className="flex flex-col gap-4">
+      <NodeButton label="All items" count={tree.total} active={selected === ALL_ITEMS} onClick={() => onSelect(ALL_ITEMS)} />
       {tree.series.map((series) => (
         <div key={series.key}>
           <div className="flex items-center gap-1">
@@ -79,7 +81,7 @@ export function StudyLogTree({ tree, selected, onSelect, onDeleteSeries, onDelet
                   <li key={episode.key}>
                     <NodeButton
                       label={episodeLabel(episode)}
-                      count={episode.entries.length}
+                      count={episode.items.length}
                       active={selected === episode.key}
                       onClick={() => onSelect(episode.key)}
                     />
@@ -99,7 +101,7 @@ export function StudyLogTree({ tree, selected, onSelect, onDeleteSeries, onDelet
           <ul className="mt-1.5 flex flex-col gap-1">
             {tree.movies.map((movie) => (
               <li key={movie.key}>
-                <NodeButton label={movie.title} count={movie.entries.length} active={selected === movie.key} onClick={() => onSelect(movie.key)} />
+                <NodeButton label={movie.title} count={movie.items.length} active={selected === movie.key} onClick={() => onSelect(movie.key)} />
               </li>
             ))}
           </ul>

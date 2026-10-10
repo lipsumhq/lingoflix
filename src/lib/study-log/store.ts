@@ -62,19 +62,6 @@ export async function appendFollowUp(id: string, followUp: FollowUp, now: Date =
   return next;
 }
 
-export async function deleteExplanations(ids: readonly string[]): Promise<void> {
-  if (ids.length === 0) return;
-  const keys = ids.map(explanationKey);
-  const stored = Object.values(await browser.storage.local.get(keys))
-    .map((value) => toExplanation(value))
-    .filter(isExplanation);
-  const indexes = await browser.storage.local.get(stored.map(indexKeyOf));
-  const ownIndexes = Object.entries(indexes)
-    .filter(([, id]) => typeof id === 'string' && ids.includes(id))
-    .map(([key]) => key);
-  await browser.storage.local.remove([...keys, ...ownIndexes]);
-}
-
 const STUDY_LOG_PREFIXES = [EXPLANATION_PREFIX, EXPLANATION_INDEX_PREFIX, ITEM_PREFIX, ITEM_INDEX_PREFIX];
 
 /**
