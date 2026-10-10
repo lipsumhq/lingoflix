@@ -1,8 +1,11 @@
 import { maskApiKey } from '@/lib/api-key';
 import type { ClaudeClient } from '@/lib/claude/client';
 import { toExplainError } from '@/lib/claude/errors';
+import { cardRows } from '@/lib/claude/suggestions';
 import type { BackgroundResponse } from '@/lib/messages';
-import type { Explanation } from '@/lib/study-log/types';
+import { suggestionKey } from '@/lib/study-log/items';
+import { isSaveSuggestion, type Explanation, type SavedItem, type SaveSuggestion } from '@/lib/study-log/types';
+import { normalizeLine } from '@/lib/subtitles/cue';
 
 export interface MessageHandlerDeps {
   getApiKey(): Promise<string | null>;
@@ -10,6 +13,10 @@ export interface MessageHandlerDeps {
   removeApiKey(): Promise<void>;
   createClient(apiKey: string): ClaudeClient;
   findExplanation(videoId: string, language: string, phrase: string): Promise<Explanation | null>;
+  getExplanation(id: string): Promise<Explanation | null>;
+  saveItem(explanation: Explanation, suggestion: SaveSuggestion): Promise<SavedItem>;
+  unsaveItem(explanation: Explanation, suggestion: SaveSuggestion): Promise<void>;
+  savedKeysFor(explanation: Explanation): Promise<string[]>;
   takePendingSeek(videoId: string): Promise<number | null>;
   openOptions(hash: string): Promise<void>;
 }
@@ -26,6 +33,8 @@ const NOT_A_KEY = "That doesn't look like an API key.";
 const OPTIONS_ROUTE = /^#\/[a-z-]*$/;
 /** Requests that change or use the key: only LingoFlix's own pages (options, popup) may send them. */
 const PAGE_ONLY = new Set(['api-key:set', 'api-key:remove', 'api-key:test']);
+
+const sameText = (a: string, b: string) => normalizeLine(a).toLowerCase() === normalizeLine(b).toLowerCase();
 
 export interface MessageContext {
   /** The sender is one of LingoFlix's own pages, not a content script on Netflix. */
@@ -44,6 +53,33 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
       if (code === 'network') return { result: 'network', message: "Couldn't reach Anthropic. Check your connection." };
       return { result: 'error', message };
     }
+  }
+
+  /**
+   * v2 spec §4.2: the row must be one the card shows for this explanation. The stored row is used, never
+   * the page's copy, and the item's source fields come from the stored explanation.
+   */
+  async function rowOf(m: Record<string, unknown>): Promise<{ explanation: Explanation; row: SaveSuggestion }> {
+    const { explanationId, suggestion } = m;
+    if (typeof explanationId !== 'string' || !isSaveSuggestion(suggestion)) throw new Error('Bad request');
+    const explanation = await deps.getExplanation(explanationId);
+    if (!explanation) throw new Error('Explanation not found');
+    const row = cardRows(explanation.suggestions, explanation.phrase).find(
+      (r) => r.type === suggestion.type && sameText(r.text, suggestion.text),
+    );
+    if (!row) throw new Error('Not a suggestion of this explanation');
+    return { explanation, row };
+  }
+
+  /**
+   * item:save and item:remove run one at a time, so two overlapping saves of one row can't both find it unsaved
+   * and each create an item. A call that fails doesn't hold up the ones queued after it.
+   */
+  let itemWrites: Promise<unknown> = Promise.resolve();
+  function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
+    const run = itemWrites.then(work);
+    itemWrites = run.catch(() => undefined);
+    return run;
   }
 
   return async (message, context) => {
@@ -69,11 +105,29 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
         if (typed && !looksLikeKey(typed)) return { result: 'rejected', message: NOT_A_KEY } satisfies BackgroundResponse<'api-key:test'>;
         return testKey(typed || (await deps.getApiKey()));
       }
-      case 'log:find': {
+      case 'explanation:find': {
         const { videoId, language, phrase } = m;
-        if (typeof videoId !== 'string' || typeof language !== 'string' || typeof phrase !== 'string') return { entry: null };
-        return { entry: await deps.findExplanation(videoId, language, phrase) } satisfies BackgroundResponse<'log:find'>;
+        if (typeof videoId !== 'string' || typeof language !== 'string' || typeof phrase !== 'string') {
+          return { explanation: null, savedKeys: [] } satisfies BackgroundResponse<'explanation:find'>;
+        }
+        const explanation = await deps.findExplanation(videoId, language, phrase);
+        return {
+          explanation,
+          savedKeys: explanation ? await deps.savedKeysFor(explanation) : [],
+        } satisfies BackgroundResponse<'explanation:find'>;
       }
+      case 'item:save':
+        return oneAtATime(async () => {
+          const { explanation, row } = await rowOf(m);
+          await deps.saveItem(explanation, row);
+          return { key: suggestionKey(explanation, row) } satisfies BackgroundResponse<'item:save'>;
+        });
+      case 'item:remove':
+        return oneAtATime(async () => {
+          const { explanation, row } = await rowOf(m);
+          await deps.unsaveItem(explanation, row);
+          return { key: suggestionKey(explanation, row) } satisfies BackgroundResponse<'item:remove'>;
+        });
       case 'pending-seek:take':
         return {
           timeMs: typeof m.videoId === 'string' ? await deps.takePendingSeek(m.videoId) : null,

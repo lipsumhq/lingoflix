@@ -5,16 +5,28 @@ import { createSdkClient } from '@/lib/claude/client';
 import { serveExplainPort, type ExplainPort } from '@/lib/claude/explain-service';
 import { EXPLAIN_PORT } from '@/lib/claude/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
-import { listItems, savedKeysFor } from '@/lib/study-log/items';
+import { listItems, migrateIfNeeded, saveItem, savedKeysFor, unsaveItem } from '@/lib/study-log/items';
 import { appendFollowUp, findExplanation, getExplanation, listExplanations, saveExplanation } from '@/lib/study-log/store';
 
 export default defineBackground(() => {
+  // v2 spec §3.3: lines explained before v2 become saved whole-line items, once: on install and update, and
+  // whenever the worker starts before it has run (a run that failed or was cut short). Both go through
+  // migrateIfNeeded, which runs one conversion at a time and never rejects.
+  browser.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === 'install' || reason === 'update') void migrateIfNeeded();
+  });
+  void migrateIfNeeded();
+
   const handle = createMessageHandler({
     getApiKey,
     setApiKey,
     removeApiKey,
     createClient: createSdkClient,
     findExplanation,
+    getExplanation,
+    saveItem: (explanation, suggestion) => saveItem(explanation, suggestion),
+    unsaveItem: (explanation, suggestion) => unsaveItem(explanation, suggestion),
+    savedKeysFor,
     takePendingSeek: (videoId) => takePendingSeek(videoId),
     openOptions: async (hash) => {
       await browser.tabs.create({ url: `${browser.runtime.getURL('/options.html')}${hash}` });

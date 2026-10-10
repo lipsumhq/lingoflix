@@ -51,7 +51,7 @@ export default defineContentScript({
       pause,
       connect: connectExplainPort,
       findEntry: async (videoId, language, phrase) =>
-        (await sendToBackground({ type: 'log:find', videoId, language, phrase })).entry,
+        (await sendToBackground({ type: 'explanation:find', videoId, language, phrase })).explanation,
       getSettings: () => settings,
       getVideoId,
       subtitleRects,

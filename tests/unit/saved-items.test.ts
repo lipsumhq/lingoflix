@@ -8,6 +8,7 @@ import {
   itemFromSuggestion,
   itemIndexKey,
   listItems,
+  migrateIfNeeded,
   migrateStudyLogV2,
   saveItem,
   savedKeysFor,
@@ -263,5 +264,39 @@ describe('migrateStudyLogV2 (v2 spec §3.3)', () => {
     await saveItem(explanation!, { type: 'line', text: explanation!.phrase, meaning: '' }, NOW, () => 'kept');
     expect(await migrateStudyLogV2()).toBe(0);
     expect((await listItems()).map((i) => i.id)).toEqual(['kept']);
+  });
+
+  describe('migrateIfNeeded (the background worker starting, and onInstalled)', () => {
+    it('converts when the marker is missing', async () => {
+      await fakeBrowser.storage.local.set({ 'log:old-1': preV2('old-1') });
+      expect(await migrateIfNeeded()).toBe(1);
+      expect(await listItems()).toEqual([expect.objectContaining({ type: 'line', explanationId: 'old-1' })]);
+      expect(await stored(MIGRATION_KEY)).toBe(true);
+    });
+
+    it('reads only the marker once it is set, and changes nothing', async () => {
+      await fakeBrowser.storage.local.set({ [MIGRATION_KEY]: true, 'log:late': preV2('late') });
+      const get = vi.spyOn(fakeBrowser.storage.local, 'get');
+      const set = vi.spyOn(fakeBrowser.storage.local, 'set');
+      expect(await migrateIfNeeded()).toBe(0);
+      expect(get.mock.calls).toEqual([[MIGRATION_KEY]]);
+      expect(set).not.toHaveBeenCalled();
+      expect(await listItems()).toEqual([]);
+    });
+
+    it('runs one conversion at a time, so two calls together save each line once', async () => {
+      await fakeBrowser.storage.local.set({ 'log:old-1': preV2('old-1') });
+      expect(await Promise.all([migrateIfNeeded(), migrateIfNeeded()])).toEqual([1, 0]);
+      expect(await listItems()).toHaveLength(1);
+    });
+
+    it('swallows errors, and the next call converts', async () => {
+      await fakeBrowser.storage.local.set({ 'log:old-1': preV2('old-1') });
+      vi.spyOn(fakeBrowser.storage.local, 'get').mockRejectedValueOnce(new Error('Storage is unavailable'));
+      expect(await migrateIfNeeded()).toBe(0);
+      expect(await listItems()).toEqual([]);
+      expect(await migrateIfNeeded()).toBe(1);
+      expect(await listItems()).toHaveLength(1);
+    });
   });
 });
