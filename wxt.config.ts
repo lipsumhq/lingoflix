@@ -12,6 +12,7 @@ export default defineConfig({
     short_name: 'LingoFlix',
     description:
       'Understand every line on Netflix: custom shortcuts, subtitle toggle and AI explanations. Not affiliated with Netflix.',
-    permissions: ['storage'],
+    permissions: ['storage', 'unlimitedStorage'],
+    host_permissions: ['https://www.netflix.com/*', 'https://api.anthropic.com/*'],
   },
 });
