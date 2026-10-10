@@ -1,17 +1,30 @@
 import { BridgeError, type BridgeMethods, type PlayerState } from './protocol';
 
-/** The part of Netflix's internal player LingoFlix uses (docs/netflix-internals.md, row 2). Times are ms. */
+/**
+ * The part of Netflix's internal player LingoFlix uses (docs/netflix-internals.md, row 2). Times are ms.
+ * `seek()` and `getSegmentTime()` count from the start of the episode; `getCurrentTime()` and `getDuration()`
+ * also count any lead-in Netflix plays before it (7007 ms when an episode starts from the beginning).
+ */
 export interface NetflixPlayer {
   seek(timeMs: number): void;
   play(): void;
   pause(): void;
   getCurrentTime(): number;
+  getSegmentTime(): number;
   getDuration(): number;
   isPaused(): boolean;
   getMovieId?(): number | string | undefined;
 }
 
-const REQUIRED_PLAYER_METHODS = ['seek', 'play', 'pause', 'getCurrentTime', 'getDuration', 'isPaused'] as const;
+const REQUIRED_PLAYER_METHODS = [
+  'seek',
+  'play',
+  'pause',
+  'getCurrentTime',
+  'getSegmentTime',
+  'getDuration',
+  'isPaused',
+] as const;
 
 interface NetflixVideoPlayerApi {
   getAllPlayerSessionIds(): string[];
@@ -69,10 +82,16 @@ function requireFinite(value: number, name: string): number {
   return value;
 }
 
-/** Current position and duration, or player-unavailable while Netflix is still loading. */
+/** Position and duration of the episode itself, in the clock `seek()` takes (the lead-in left out). */
+function episodeTimes(p: NetflixPlayer): { currentMs: number; durationMs: number } {
+  const currentMs = p.getSegmentTime();
+  const leadInMs = Math.max(0, p.getCurrentTime() - currentMs);
+  return { currentMs, durationMs: p.getDuration() - leadInMs };
+}
+
+/** Episode position and duration, or player-unavailable while Netflix is still loading. */
 function readyTimes(p: NetflixPlayer): { currentMs: number; durationMs: number } {
-  const currentMs = p.getCurrentTime();
-  const durationMs = p.getDuration();
+  const { currentMs, durationMs } = episodeTimes(p);
   if (!Number.isFinite(currentMs) || !Number.isFinite(durationMs) || durationMs <= END_GUARD_MS) {
     unavailable('Netflix player is not ready');
   }
@@ -101,9 +120,10 @@ export function createPlayerMethods(getPlayer: () => NetflixPlayer, getVideoId: 
     },
     getState(): PlayerState {
       const p = getPlayer();
+      const { currentMs, durationMs } = episodeTimes(p);
       return {
-        currentTimeMs: p.getCurrentTime(),
-        durationMs: p.getDuration(),
+        currentTimeMs: currentMs,
+        durationMs,
         paused: p.isPaused(),
         videoId: getVideoId(),
       };

@@ -4,7 +4,12 @@ import { END_GUARD_MS, clampTime, createPlayerMethods, findPlayer, type NetflixP
 import { BRIDGE_REQUEST_EVENT, BRIDGE_RESPONSE_EVENT, BridgeError, decode, encode } from '@/lib/bridge/protocol';
 import { serveBridge } from '@/lib/bridge/server';
 
+/**
+ * `time` and `duration` are in the clock `seek()` takes (the episode itself). Netflix can play a
+ * lead-in before the episode; `getCurrentTime()` and `getDuration()` then include it, `getSegmentTime()` doesn't.
+ */
 class FakePlayer implements NetflixPlayer {
+  leadInMs = 0;
   constructor(
     public time = 60_000,
     public duration = 1_200_000,
@@ -21,10 +26,13 @@ class FakePlayer implements NetflixPlayer {
     this.paused = true;
   }
   getCurrentTime() {
+    return this.time + this.leadInMs;
+  }
+  getSegmentTime() {
     return this.time;
   }
   getDuration() {
-    return this.duration;
+    return this.duration + this.leadInMs;
   }
   isPaused() {
     return this.paused;
@@ -130,7 +138,7 @@ describe('findPlayer', () => {
   });
 
   it('throws player-unavailable when the player lacks a required method (Netflix renamed it)', () => {
-    for (const method of ['seek', 'play', 'pause', 'getCurrentTime', 'getDuration', 'isPaused']) {
+    for (const method of ['seek', 'play', 'pause', 'getCurrentTime', 'getSegmentTime', 'getDuration', 'isPaused']) {
       const player = new FakePlayer();
       (player as unknown as Record<string, unknown>)[method] = undefined;
       expectUnavailable(() => findPlayer(fakeNetflix({ 'watch-1': player })));
@@ -250,6 +258,42 @@ describe('bridge round trip', () => {
       { id: 'explode', ok: false, code: 'bad-request', message: 'Unknown method explode' },
       { id: 'toString', ok: false, code: 'bad-request', message: 'Unknown method toString' },
     ]);
+  });
+});
+
+describe('a lead-in before the episode (seek probe, 2026-10-10)', () => {
+  // Live: getCurrentTime() ran 7007 ms ahead of getSegmentTime(), and seek(x) landed at getSegmentTime() === x,
+  // so seeking from getCurrentTime() made → jump +12 s and ← jump +2 s.
+  function withLeadIn(time: number, duration = 1_200_000) {
+    const player = new FakePlayer(time, duration);
+    player.leadInMs = 7_007;
+    return player;
+  }
+
+  it('seekBy moves by exactly the requested amount', async () => {
+    const player = withLeadIn(70_000);
+    const client = connect({ current: fakeNetflix({ 'watch-1': player }) });
+    await client.call('seekBy', -5_000);
+    expect(player.time).toBe(65_000);
+    await client.call('seekBy', 5_000);
+    expect(player.time).toBe(70_000);
+  });
+
+  it('getState reports times in the clock seek() takes, so a saved time seeks back to the same moment', async () => {
+    const player = withLeadIn(70_000);
+    const client = connect({ current: fakeNetflix({ 'watch-1': player }) });
+    const state = await client.call('getState');
+    expect(state).toMatchObject({ currentTimeMs: 70_000, durationMs: 1_200_000 });
+    player.time = 0;
+    await client.call('seek', state.currentTimeMs);
+    expect(player.time).toBe(70_000);
+  });
+
+  it('keeps → from running past the end of the episode', async () => {
+    const player = withLeadIn(1_200_000 - 2_000);
+    const client = connect({ current: fakeNetflix({ 'watch-1': player }) });
+    await client.call('seekBy', 5_000);
+    expect(player.time).toBe(1_200_000 - END_GUARD_MS);
   });
 });
 

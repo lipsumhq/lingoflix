@@ -1,6 +1,7 @@
 export const BRIDGE_REQUEST_EVENT = 'lingoflix:bridge-request';
 export const BRIDGE_RESPONSE_EVENT = 'lingoflix:bridge-response';
 
+/** Times are ms from the start of the episode — the clock `seek` takes, so a saved time seeks back to it. */
 export interface PlayerState {
   currentTimeMs: number;
   durationMs: number;

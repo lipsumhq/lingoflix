@@ -196,7 +196,7 @@ Pure logic lives in `src/lib/` with no Chrome or DOM dependencies where possible
 
 ### 6.3 Messaging
 
-- **Overlay ↔ page bridge:** `CustomEvent`s on `document` with a LingoFlix-specific event name, request/response correlated by id. Bridge requests: `seek(ms)`, `play()`, `pause()`, `getState()` → `{ currentTimeMs, paused, videoId }`. Bridge events: `track-available({ language, url, format })`, `metadata({ videoId, kind, seriesId, seriesTitle, seasonNumber, episodeNumber, episodeTitle })`.
+- **Overlay ↔ page bridge:** `CustomEvent`s on `document` with a LingoFlix-specific event name, request/response correlated by id. Bridge requests: `seek(ms)`, `play()`, `pause()`, `getState()` → `{ currentTimeMs, paused, videoId }`. All bridge times are episode time — the clock Netflix's `seek()` takes (`getSegmentTime()`), which can differ from `getCurrentTime()` by a lead-in (`docs/netflix-internals.md`, "Two clocks"). Bridge events: `track-available({ language, url, format })`, `metadata({ videoId, kind, seriesId, seriesTitle, seasonNumber, episodeNumber, episodeTitle })`.
 - **Overlay ↔ background (explanations):** a `chrome.runtime` Port named `explain`. Overlay sends `{ type: "start", request }` or `{ type: "follow-up", entryId, conversation, question }`. Background sends `{ type: "delta", text }`, `{ type: "done", entryId }`, `{ type: "error", code, message }`. Disconnecting the port aborts the request.
 - **Overlay ↔ background (other):** `chrome.runtime.sendMessage` for Study Log lookup, shadowing commands (`start`, `stop`, `play`, `discard`, forwarded to the offscreen document), and opening the options page.
 

@@ -9,12 +9,23 @@ Verified on: 2026-10-10 · Chrome 154 (macOS) · A Different World, E1 "Irreconc
 | # | Item | LingoFlix assumes | Observed | OK? | Code that depends on it |
 |---|------|-------------------|----------|-----|-------------------------|
 | 1 | Subtitle layer | `.player-timedtext` contains the visible subtitle text | `div.player-timedtext` → `div.player-timedtext-text-container` → `span` → `span` (text). `innerText` = the visible line. | ✅ | `src/lib/netflix/selectors.ts` |
-| 2 | Player API | `netflix.appContext.state.playerApp.getAPI().videoPlayer` → `getAllPlayerSessionIds()` (pick the id starting with `watch`) → `getVideoPlayerBySessionId(id)` with `seek(ms)`, `play()`, `pause()`, `getCurrentTime()` (ms), `getDuration()` (ms), `isPaused()` | Path and all six methods present. One session `watch-55980845-…`. `getCurrentTime()` = 251854 vs `<video>.currentTime` = 251.95 s → milliseconds. | ✅ | `src/lib/bridge/player.ts` |
+| 2 | Player API | `netflix.appContext.state.playerApp.getAPI().videoPlayer` → `getAllPlayerSessionIds()` (pick the id starting with `watch`) → `getVideoPlayerBySessionId(id)` with `seek(ms)`, `play()`, `pause()`, `getCurrentTime()` (ms), `getDuration()` (ms), `isPaused()` | Path and all six methods present. One session `watch-55980845-…`. `getCurrentTime()` = 251854 vs `<video>.currentTime` = 251.95 s → milliseconds. **But `seek()` takes `getSegmentTime()`'s clock, not `getCurrentTime()`'s** — see "Two clocks" below. | ✅ | `src/lib/bridge/player.ts` |
 | 3 | Text track download URLs | Verified in Plan 2 (needs the extension's `document_start` hook) | Plan 2 | — | Plan 2 |
 | 4 | Title metadata | `playerApp.getState().videoPlayer.videoMetadata[videoId]._metadata.video` has series title, type, seasons → episodes | Path differs: use `videoMetadata[videoId]._metadataObject.video` → `{ title, type: "show"\|"movie", id (series id), currentEpisode, hiddenEpisodeNumbers, seasons: [{ id, seq, title, year, shortName, longName, hiddenEpisodeNumbers, episodes: [{ id, episodeId, seq, title, runtime, displayRuntime, creditsOffset, bookmark, skipMarkers, … }] }] }`. Find the episode whose `id === currentEpisode` → season `seq`, episode `seq`, episode `title`. Entry also has methods `getTitle`, `getVideo`, `getCurrentVideo`, `getAllSeasons`. DOM fallback `[data-uia="video-title"]` = `h4` (series) + `span` (`E1`) + `span` (episode title). `document.title` is just `Netflix`. | ✅ (corrected path) | Plan 2 |
 | 5 | Key preemption | A capture-phase `window` keydown listener registered at `document_start` runs before Netflix's handlers | Plan 1 Task 5 | — | `src/entrypoints/netflix.content/keyboard.ts` |
 | 6 | Fullscreen element | Some element that contains `.player-timedtext` | `div.watch-video[data-uia="watch-video"]`; it contains `.player-timedtext`. Mount overlays inside it (or deeper, e.g. `[data-uia="player"]`). | ✅ | Plan 2 overlay mount; `notice.ts` already mounts in `document.fullscreenElement` |
 | 7 | `?t=` deep link | `/watch/{id}?t={seconds}` starts playback at that time | Does **not** work: `?t=120` did not start at 2:00 (user-verified); `?t=2000` resumed at the saved bookmark (11:31). | ❌ | Plan 2 Study Log — open `/watch/{id}` then seek via the page bridge (spec §5.5) |
+
+## Two clocks (seek probe, 2026-10-10, `scripts/netflix-seek-probe.js`)
+
+Starting `/watch/82028220` from the beginning, Netflix played a 7007 ms lead-in before the episode:
+
+- `getSegmentTime()` stayed `0` while `getCurrentTime()` ran 0 → 7007, then both advanced with `getCurrentTime() − getSegmentTime() = 7007` for the rest of the session.
+- `seek(x)` landed at `getSegmentTime() === x` (17 of 17 calls), never at `getCurrentTime() === x`.
+- So LingoFlix's original `seek(getCurrentTime() ± 5000)` jumped → **+12 s** and ← **+2 s (forward)**. One bridge request and one `seek()` per key press, and no arrow key reached Netflix, which rules out double handling. Every seek landed exactly on target, which rules out keyframe snapping.
+- In the earlier v1/v2 probes (resumed from the bookmark mid-episode) the two clocks were equal (691009 / 691009), which is why this only shows up after a lead-in.
+
+Rule: **every time LingoFlix stores, compares, or seeks to is in `getSegmentTime()`'s clock** (the episode's own time). The bridge reports `currentTimeMs = getSegmentTime()` and `durationMs = getDuration() − (getCurrentTime() − getSegmentTime())`. That duration is exact if `getDuration()` includes the lead-in, and ends the clamp 7 s early if it doesn't — safe either way; unverified which. Still open for Plan 2: which clock subtitle cue times (from the manifest's text tracks) use — check against `getSegmentTime()` while a line is on screen.
 
 ## Other findings (for Plan 2)
 
@@ -30,7 +41,6 @@ Verified on: 2026-10-10 · Chrome 154 (macOS) · A Different World, E1 "Irreconc
 - **Original language:** `getAudioTrack()` → `{ bcp47: "en", displayName: "English [Original]", isNative: true, … }`. The native audio track's `bcp47` is the show's spoken language.
 - `getTimedTextTrack()` also has `channels`, `subType`, `variant`. `getTimedTextSettings()` → `{ bounds: { bottom: 135 }, size: null, visibility: true }`.
 - `getTimeCodes()` → 2 entries, first `{ type: "start", startOffsetMs: 5922, endOffsetMs: 5922 }`. `getChapters()` → empty. `skipMarkers` has `credit` and `recap` ranges.
-- `getSegmentTime()` equals `getCurrentTime()` in normal playback.
 - **Subtitle files are not visible in resource timing:** the last 40 Netflix XHRs are all media `GET /range/<a>-<b>` on `*.oca.nflxvideo.net`. Text-track URLs must be captured from the manifest (spec §8.2) — still a Plan 2 check.
 - `playerApp.getState()` keys: `playerApp, postPlay, videoPlayer, live, accessibility, ads`. `videoPlayer` keys include `videoMetadata`, `playbackStateBySessionId`, `videoSession`.
 - This show's only season has `seq: 1`, `year: 2026`, empty `shortName`, which is why the player UI shows `E1` without a season.
