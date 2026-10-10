@@ -1,4 +1,4 @@
-import { Settings as SettingsIcon } from 'lucide-react';
+import { BookOpen, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { DonationCard } from '@/components/DonationCard';
 import { Logo } from '@/components/Logo';
@@ -7,8 +7,12 @@ import { focusRing } from '@/components/styles';
 import { useSettings } from '@/hooks/useSettings';
 import { useTheme } from '@/hooks/useTheme';
 import { SettingsTab } from './SettingsTab';
+import { StudyLogTab } from './StudyLogTab';
 
-const TABS = [{ id: 'settings', label: 'Settings', icon: SettingsIcon }] as const;
+const TABS = [
+  { id: 'settings', label: 'Settings', icon: SettingsIcon },
+  { id: 'study-log', label: 'Study Log', icon: BookOpen },
+] as const;
 type TabId = (typeof TABS)[number]['id'];
 
 function tabFromHash(): TabId {
@@ -57,6 +61,7 @@ export function App() {
       <div className="mx-auto grid max-w-5xl gap-6 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_260px]">
         <main className="flex flex-col gap-5">
           {tab === 'settings' && <SettingsTab />}
+          {tab === 'study-log' && <StudyLogTab />}
           <p className="text-xs font-semibold text-mute">Not affiliated with or endorsed by Netflix.</p>
         </main>
         <aside aria-label="Tips and support" className="flex flex-col gap-4 lg:pt-[74px]">

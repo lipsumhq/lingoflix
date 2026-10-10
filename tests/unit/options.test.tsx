@@ -36,4 +36,11 @@ describe('options page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Increase Rewind seconds' }));
     await waitFor(async () => expect((await loadSettings()).rewindSeconds).toBe(6));
   });
+
+  it('#/study-log opens the Study Log tab', async () => {
+    location.hash = '#/study-log';
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Study Log', level: 1 })).toBeTruthy();
+    location.hash = '';
+  });
 });

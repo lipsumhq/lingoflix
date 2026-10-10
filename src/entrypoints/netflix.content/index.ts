@@ -14,6 +14,7 @@ import { OverlayApp } from './overlay/OverlayApp';
 import { createPauseGuard } from './overlay/pause';
 import { createOverlayRuntime } from './overlay/runtime';
 import { createStore } from './overlay/store';
+import { runPendingSeek } from './pending-seek-runner';
 import { readDisplayedSubtitle, watchSubtitles } from './subtitle-dom';
 import { createSubtitleSession } from './subtitle-session';
 
@@ -89,11 +90,23 @@ export default defineContentScript({
     // Window capture, before Netflix sees it: a click that dismisses a shortcut card is consumed.
     ctx.addEventListener(window, 'pointerdown', runtime.onPointerDown, { capture: true });
     let lastVideoId = getVideoId();
+    let cancelPendingSeek: (() => void) | null = null;
+    const startPendingSeek = (videoId: string | null) => {
+      cancelPendingSeek?.();
+      cancelPendingSeek = videoId
+        ? runPendingSeek(videoId, {
+            take: async (id) => (await sendToBackground({ type: 'pending-seek:take', videoId: id })).timeMs,
+            bridge,
+          })
+        : null;
+    };
+    startPendingSeek(lastVideoId);
     ctx.addEventListener(window, 'wxt:locationchange', () => {
       const videoId = getVideoId();
       if (videoId === lastVideoId) return;
       lastVideoId = videoId;
       runtime.onVideoChange();
+      startPendingSeek(videoId);
     });
 
     void mountOverlay(
@@ -112,6 +125,7 @@ export default defineContentScript({
     });
 
     ctx.onInvalidated(() => {
+      cancelPendingSeek?.();
       unwatch();
       stopSubtitles();
       runtime.teardown();
