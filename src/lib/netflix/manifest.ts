@@ -76,15 +76,15 @@ export function extractTextTracks(parsed: unknown): CapturedManifest | null {
 
 /**
  * Both lists can describe the same tracks. A track from a later list joins the earlier list's track
- * that shares an id (keeping every id, and the files if only the later one has them); tracks within
- * one list are never merged.
+ * with the same primary id (`new_track_id` when present), keeping every id, and the files if only the
+ * later one has them. Tracks within one list are never merged.
  */
 function mergeTracks([first = [], ...rest]: CapturedTrack[][]): CapturedTrack[] {
   const merged = [...first];
   for (const list of rest) {
     const earlier = merged.length;
     for (const track of list) {
-      const i = merged.findIndex((t, at) => at < earlier && t.ids.some((id) => track.ids.includes(id)));
+      const i = merged.findIndex((t, at) => at < earlier && t.ids[0] === track.ids[0]);
       if (i === -1) {
         merged.push(track);
         continue;
@@ -124,6 +124,9 @@ function tracksFrom(list: unknown): CapturedTrack[] {
   return tracks;
 }
 
+const hasFiles = (manifest: CapturedManifest | null | undefined): manifest is CapturedManifest =>
+  !!manifest?.tracks.some((t) => t.urls.length > 0);
+
 /** Where the playing title's manifest sits in `player.getInternalPlayer()` (docs/netflix-internals.md row 3). */
 const MANIFEST_PATH = ['playback', 'segmentWithBoundObservables', 'manifest', 'manifestResult'];
 
@@ -160,9 +163,13 @@ export function manifestAtKnownPath(player: unknown, movieId: string): CapturedM
 /** Objects worth looking inside: not media buffers (huge), page elements (they lead into React), or windows. */
 function walkable(value: unknown): value is object {
   if (typeof value !== 'object' || value === null || value === globalThis) return false;
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return false;
-  if (typeof Window !== 'undefined' && value instanceof Window) return false;
-  return typeof Node === 'undefined' || !(value instanceof Node);
+  try {
+    if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return false;
+    if (typeof Window !== 'undefined' && value instanceof Window) return false;
+    return typeof Node === 'undefined' || !(value instanceof Node);
+  } catch {
+    return false; // e.g. a revoked Proxy
+  }
 }
 
 /**
@@ -189,7 +196,7 @@ export function searchPlayerForManifest(player: unknown, movieId: string): Captu
         reads++;
         // A copy without any file is no use: keep looking.
         const found = manifestOf(obj, movieId);
-        if (found?.tracks.some((t) => t.urls.length > 0)) return found;
+        if (hasFiles(found)) return found;
         const length = Array.isArray(obj) ? field(obj, 'length') : undefined;
         if (typeof length === 'number' && length > SEARCH_LIMITS.keysPerObject) continue;
         const keys = Object.getOwnPropertyNames(obj);
@@ -215,7 +222,8 @@ export function searchPlayerForManifest(player: unknown, movieId: string): Captu
 export function createManifestSource(captured: { get(movieId: string): CapturedManifest | undefined }, now: () => number = Date.now) {
   const searches = new Map<string, { at: number; found: CapturedManifest | undefined }>();
   return (movieId: string, player: unknown): CapturedManifest | undefined => {
-    const known = manifestAtKnownPath(player, movieId) ?? captured.get(movieId);
+    // A copy without files (wherever it came from) never stops the search for one with files.
+    const known = [manifestAtKnownPath(player, movieId), captured.get(movieId)].find(hasFiles);
     if (known) return known;
     const last = searches.get(movieId);
     if (last?.found) return last.found;
@@ -275,7 +283,6 @@ export function createManifestStore(limit = 10) {
   return {
     add(manifest: CapturedManifest) {
       // Response.json sees many objects; one without files never replaces a capture that has them.
-      const hasFiles = (m: CapturedManifest | undefined) => !!m?.tracks.some((t) => t.urls.length > 0);
       if (hasFiles(byMovie.get(manifest.movieId)) && !hasFiles(manifest)) return;
       byMovie.delete(manifest.movieId);
       byMovie.set(manifest.movieId, manifest);

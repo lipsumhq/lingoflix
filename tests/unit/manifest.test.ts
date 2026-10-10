@@ -146,6 +146,17 @@ describe('extractTextTracks', () => {
     expect(acrossLists?.tracks[0]?.ids).toEqual(expect.arrayContaining(['X', 'Y']));
     expect(acrossLists?.tracks[0]?.urls).toEqual(['https://cdn.example/y']);
   });
+
+  it('never joins two tracks that only share a secondary id, so each keeps its own file', () => {
+    const files = (tag: string) => ({ 'dfxp-ls-sdh': { urls: [{ url: `https://cdn.example/${tag}` }] } });
+    const tracks = (list: unknown[]) => extractTextTracks({ movieId: 1, textTracks: list.slice(0, 1), timedtexttracks: list })?.tracks ?? [];
+    const merged = tracks([
+      { id: 'S', new_track_id: 'A', ttDownloadables: files('a') },
+      { id: 'S', new_track_id: 'B', ttDownloadables: files('b') },
+    ]);
+    expect(merged.find((t) => t.ids.includes('B'))?.urls).toEqual(['https://cdn.example/b']);
+    expect(merged.find((t) => t.ids.includes('A'))?.ids).not.toContain('B');
+  });
 });
 
 const playerWith = (internal: unknown) => ({ getInternalPlayer: () => internal });
@@ -244,6 +255,13 @@ describe('searchPlayerForManifest', () => {
     expect(createManifestSource(createManifestStore(), () => 0)('82028221', playerWith(revoked.proxy))).toBeUndefined();
   });
 
+  it('a child that throws when checked does not hide its siblings', () => {
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    const player = playerWith({ playback: { a: revoked.proxy, b: { manifestResult: liveManifest(82028221) } } });
+    expect(searchPlayerForManifest(player, '82028221')?.movieId).toBe('82028221');
+  });
+
   it('passes over a copy of the manifest that has no files and keeps looking', () => {
     const stub = { movieId: 82028221, textTracks: [{ new_track_id: EN_CC, language: 'en' }] };
     const player = playerWith({ playback: { a: { manifestResult: stub }, b: { deeper: { manifestResult: liveManifest(82028221) } } } });
@@ -291,6 +309,14 @@ describe('createManifestSource', () => {
     const getInternalPlayer = vi.fn(() => ({ playback: { elsewhere: { manifestResult: liveManifest(82028221) } } }));
     expect(getManifest('82028221', { getInternalPlayer })).toBe(captured);
     expect(getInternalPlayer).toHaveBeenCalledTimes(1); // the known path only: no search
+  });
+
+  it('a copy without files at the known path or from the hook does not stop the search', () => {
+    const stub = { movieId: 82028221, textTracks: [{ new_track_id: EN_CC, language: 'en' }] };
+    const store = createManifestStore();
+    store.add(extractTextTracks(stub)!);
+    const player = atKnownPath(stub, { elsewhere: { manifestResult: liveManifest(82028221) } });
+    expect(createManifestSource(store, () => 0)('82028221', player)?.tracks.find((t) => t.ids.includes(EN_CC))?.urls).toHaveLength(3);
   });
 
   it('searches at most once per cooldown while it misses, and keeps what it found', () => {
