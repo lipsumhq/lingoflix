@@ -123,7 +123,7 @@ Every successful explanation is saved automatically.
 **Organization (Study Log tab):**
 - Left: a tree **Series → Season → Episode** (each with an entry count), plus a **Movies** group (one node per movie). Series sorted by most recently updated; seasons and episodes in numeric order.
 - Right: entries of the selected episode/movie in `videoTimeMs` order. Each shows the timestamp (e.g. `30:34`), the phrase, the collapsible response, and follow-ups.
-- **Open at this moment** opens `https://www.netflix.com/watch/{videoId}?t={seconds}`.
+- **Open at this moment** stores a pending seek `{ videoId, timeMs }` in `chrome.storage.session` and opens `https://www.netflix.com/watch/{videoId}`. When the Netflix content script sees that `videoId` playing (page bridge reports the player ready), it seeks to `timeMs` and clears the pending seek. A pending seek older than 2 minutes is ignored. (Netflix ignores `?t=`; verified 2026-10-10, see `docs/netflix-internals.md` row 7.)
 - **Delete** on an entry, an episode, a season, or a series (each with a confirmation dialog).
 - **Reset all** removes the entire Study Log after a confirmation dialog.
 
@@ -283,7 +283,7 @@ These depend on Netflix internals and are verified on real Netflix (requires the
 4. Where title metadata (series/season/episode) is exposed.
 5. That a capture-phase `window` listener at `document_start` preempts Netflix's key handling.
 6. Which element Netflix makes fullscreen (overlay must mount inside it).
-7. That `/watch/{id}?t={seconds}` starts playback at that time.
+7. ~~That `/watch/{id}?t={seconds}` starts playback at that time.~~ Verified 2026-10-10: it does not; §5.5 uses a pending seek instead.
 
 If any check fails, the affected behavior uses the fallback already defined above; the spec is updated if a fallback is insufficient.
 
