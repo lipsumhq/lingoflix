@@ -82,3 +82,62 @@ export function toExplanation(value: unknown): Explanation | null {
   const suggestions = Array.isArray(v.suggestions) ? v.suggestions.filter(isSaveSuggestion) : [];
   return { ...(v as unknown as Explanation), suggestions };
 }
+
+/** One saved item: the Study Log (v2 spec §3.2). Its source fields are copied from the explanation. */
+export interface SavedItem {
+  id: string;
+  type: ItemType;
+  /** The word, phrase or idiom as it appears in the line; for `line`, the whole line. */
+  text: string;
+  /** Short meaning in `explanationLanguage`; may be ''. */
+  meaning: string;
+  /** The explanation it came from; null when that record is gone or was never imported. */
+  explanationId: string | null;
+  /** The full subtitle line. */
+  line: string;
+  /** Episode time where the line starts. */
+  lineTimeMs: number;
+  context: DialogueContext;
+  videoId: string;
+  kind: 'episode' | 'movie';
+  seriesId: string | null;
+  /** Series title, or the movie title. */
+  seriesTitle: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  episodeTitle: string | null;
+  explanationLanguage: string;
+  savedAt: string;
+  updatedAt: string;
+}
+
+const isNullableString = (value: unknown) => value === null || typeof value === 'string';
+const isNullableNumber = (value: unknown) => value === null || (typeof value === 'number' && Number.isFinite(value));
+
+export function isSavedItem(value: unknown): value is SavedItem {
+  if (!isRecord(value)) return false;
+  const v = value;
+  return (
+    typeof v.id === 'string' &&
+    ITEM_TYPES.includes(v.type as ItemType) &&
+    typeof v.text === 'string' &&
+    typeof v.meaning === 'string' &&
+    isNullableString(v.explanationId) &&
+    typeof v.line === 'string' &&
+    typeof v.lineTimeMs === 'number' &&
+    Number.isFinite(v.lineTimeMs) &&
+    isRecord(v.context) &&
+    isStringArray(v.context.before) &&
+    isStringArray(v.context.after) &&
+    typeof v.videoId === 'string' &&
+    (v.kind === 'episode' || v.kind === 'movie') &&
+    isNullableString(v.seriesId) &&
+    typeof v.seriesTitle === 'string' &&
+    isNullableNumber(v.seasonNumber) &&
+    isNullableNumber(v.episodeNumber) &&
+    isNullableString(v.episodeTitle) &&
+    typeof v.explanationLanguage === 'string' &&
+    typeof v.savedAt === 'string' &&
+    typeof v.updatedAt === 'string'
+  );
+}

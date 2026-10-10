@@ -1,11 +1,9 @@
 import { browser } from '#imports';
 import { normalizeLine } from '@/lib/subtitles/cue';
+import { EXPLANATION_INDEX_PREFIX, EXPLANATION_PREFIX, ITEM_INDEX_PREFIX, ITEM_PREFIX } from './keys';
 import { toExplanation, type Explanation, type FollowUp, type NewExplanation } from './types';
 
-/** `log:{id}` holds an explanation (v2 spec §3.1). */
-export const EXPLANATION_PREFIX = 'log:';
-/** `logkey:{videoId}|{language}|{normalized line}` holds the id of that line's explanation. */
-export const EXPLANATION_INDEX_PREFIX = 'logkey:';
+export { EXPLANATION_INDEX_PREFIX, EXPLANATION_PREFIX } from './keys';
 
 const explanationKey = (id: string) => `${EXPLANATION_PREFIX}${id}`;
 
@@ -77,18 +75,24 @@ export async function deleteExplanations(ids: readonly string[]): Promise<void> 
   await browser.storage.local.remove([...keys, ...ownIndexes]);
 }
 
-/** Main spec §5.5 Reset all: every explanation and lookup key, nothing else (the API key stays). */
+const STUDY_LOG_PREFIXES = [EXPLANATION_PREFIX, EXPLANATION_INDEX_PREFIX, ITEM_PREFIX, ITEM_INDEX_PREFIX];
+
+/**
+ * v2 spec §3.4 Reset all: the explanation history and the saved items, with their lookup keys. Nothing else:
+ * the API key stays, and so does the migration marker (otherwise later explanations would be converted).
+ */
 export async function resetStudyLog(): Promise<void> {
-  const keys = Object.keys(await browser.storage.local.get(null)).filter(
-    (key) => key.startsWith(EXPLANATION_PREFIX) || key.startsWith(EXPLANATION_INDEX_PREFIX),
+  const keys = Object.keys(await browser.storage.local.get(null)).filter((key) =>
+    STUDY_LOG_PREFIXES.some((prefix) => key.startsWith(prefix)),
   );
   if (keys.length > 0) await browser.storage.local.remove(keys);
 }
 
-/** Calls back whenever any explanation is added, changed, or removed (e.g. from a Netflix tab). */
+/** Calls back whenever an explanation or a saved item is added, changed, or removed (e.g. from a Netflix tab). */
 export function watchStudyLog(callback: () => void): () => void {
   const listener = (changes: Record<string, unknown>, area: string) => {
-    if (area === 'local' && Object.keys(changes).some((key) => key.startsWith(EXPLANATION_PREFIX))) callback();
+    if (area !== 'local') return;
+    if (Object.keys(changes).some((key) => key.startsWith(EXPLANATION_PREFIX) || key.startsWith(ITEM_PREFIX))) callback();
   };
   browser.storage.onChanged.addListener(listener);
   return () => browser.storage.onChanged.removeListener(listener);
