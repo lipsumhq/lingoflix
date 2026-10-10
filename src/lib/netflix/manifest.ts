@@ -34,15 +34,25 @@ function urlsOf(download: unknown): string[] {
   return [...listed, ...mapped].filter((u): u is string => typeof u === 'string' && u.startsWith('https://'));
 }
 
+/** Netflix's name for the track list: `textTracks` now, `timedtexttracks` before (both can be present). */
+const TRACK_LISTS = ['textTracks', 'timedtexttracks'] as const;
+
 export function extractTextTracks(parsed: unknown): CapturedManifest | null {
   if (!isRecord(parsed)) return null;
   const root = isRecord(parsed.result) ? parsed.result : parsed;
-  if (!Array.isArray(root.timedtexttracks)) return null;
+  const lists = TRACK_LISTS.map((key) => root[key]).filter(Array.isArray);
+  if (!lists.length) return null;
   const movieId = root.movieId;
   if (typeof movieId !== 'string' && typeof movieId !== 'number') return null;
 
+  const parsedLists = lists.map(tracksFrom);
+  const tracks = parsedLists.find((list) => list.some((t) => t.urls.length > 0)) ?? parsedLists[0]!;
+  return { movieId: String(movieId), tracks };
+}
+
+function tracksFrom(list: unknown[]): CapturedTrack[] {
   const tracks: CapturedTrack[] = [];
-  for (const raw of root.timedtexttracks) {
+  for (const raw of list) {
     if (!isRecord(raw)) continue;
     const ids = idsOf(raw);
     if (!ids.length) continue;
@@ -63,7 +73,70 @@ export function extractTextTracks(parsed: unknown): CapturedManifest | null {
       urls: text.flatMap((d) => d.urls),
     });
   }
-  return { movieId: String(movieId), tracks };
+  return tracks;
+}
+
+/** Where the playing title's manifest sits in `player.getInternalPlayer()` (docs/netflix-internals.md row 3). */
+const MANIFEST_PATH = ['playback', 'segmentWithBoundObservables', 'manifest', 'manifestResult'];
+/** If Netflix renames a step of that path, search this deep (the path is 4) and no further. */
+const SEARCH_DEPTH = 6;
+const SEARCH_BUDGET = 20_000;
+
+/** Reads a plain data property; getters are never run, so no Netflix code runs. */
+function dataProperty(obj: object, key: string): unknown {
+  const d = Object.getOwnPropertyDescriptor(obj, key);
+  return d && 'value' in d ? d.value : undefined;
+}
+
+function manifestOf(candidate: unknown, movieId: string): CapturedManifest | null {
+  if (!isRecord(candidate) || String(dataProperty(candidate, 'movieId')) !== movieId) return null;
+  return extractTextTracks(candidate);
+}
+
+/** Objects worth looking inside: not media buffers (huge) and not page elements (they lead into React). */
+function walkable(value: unknown): value is object {
+  if (typeof value !== 'object' || value === null) return false;
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return false;
+  return typeof Node === 'undefined' || !(value instanceof Node);
+}
+
+/**
+ * The text tracks of `movieId`, read from Netflix's player memory (MAIN world): the known path first,
+ * then a bounded breadth-first search. Other manifests there (ads, previews) have another movieId. Never throws.
+ */
+export function manifestFromPlayer(player: unknown, movieId: string): CapturedManifest | undefined {
+  let internal: unknown;
+  try {
+    internal = (player as { getInternalPlayer?(): unknown } | null)?.getInternalPlayer?.();
+    let known: unknown = internal;
+    for (const key of MANIFEST_PATH) known = walkable(known) ? dataProperty(known, key) : undefined;
+    const direct = manifestOf(known, movieId);
+    if (direct) return direct;
+  } catch {
+    return undefined;
+  }
+
+  const seen = new Set<object>();
+  let level: object[] = walkable(internal) ? [internal] : [];
+  for (let depth = 0; depth <= SEARCH_DEPTH && level.length > 0; depth++) {
+    const next: object[] = [];
+    for (const obj of level) {
+      if (seen.has(obj) || seen.size >= SEARCH_BUDGET) continue;
+      seen.add(obj);
+      try {
+        const found = manifestOf(obj, movieId);
+        if (found) return found;
+        for (const key of Object.getOwnPropertyNames(obj)) {
+          const value = dataProperty(obj, key);
+          if (walkable(value) && !seen.has(value)) next.push(value);
+        }
+      } catch {
+        // An object that refuses to be read is skipped.
+      }
+    }
+    level = next;
+  }
+  return undefined;
 }
 
 export interface ManifestWindow {

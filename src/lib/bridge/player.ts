@@ -103,7 +103,8 @@ function readyTimes(p: NetflixPlayer): { currentMs: number; durationMs: number }
 
 /** Where the bridge reads subtitle files and titles (wired to Netflix in netflix-bridge.content.ts). */
 export interface PlayerSources {
-  getManifest(movieId: string): CapturedManifest | undefined;
+  /** `player` is the one the bridge found, so the manifest can be read from its memory. */
+  getManifest(movieId: string, player: NetflixPlayer): CapturedManifest | undefined;
   getMetadataVideo(videoId: string): unknown;
   getDocument(): Document | null;
 }
@@ -183,9 +184,10 @@ export function createPlayerMethods(
     },
     getSubtitleSource() {
       const videoId = getVideoId();
-      const track = readTextTrack(getPlayer());
+      const player = getPlayer();
+      const track = readTextTrack(player);
       if (!videoId || !track || track.isNone || track.isImageBased || !sources) return null;
-      const captured = sources.getManifest(videoId)?.tracks.find((t) => t.ids.includes(track.trackId));
+      const captured = sources.getManifest(videoId, player)?.tracks.find((t) => t.ids.includes(track.trackId));
       const url = captured?.urls[0];
       if (!captured || !url) return null;
       return { videoId, trackId: track.trackId, language: track.language || captured.language, url };

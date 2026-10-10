@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBridgeClient, type BridgeClient } from '@/lib/bridge/client';
 import { END_GUARD_MS, clampTime, createPlayerMethods, findPlayer, metadataVideoFrom, type NetflixPlayer } from '@/lib/bridge/player';
 import { BRIDGE_REQUEST_EVENT, BRIDGE_RESPONSE_EVENT, BridgeError, decode, encode, parseSubtitleSource, parseTitleInfo } from '@/lib/bridge/protocol';
@@ -381,6 +381,21 @@ describe('subtitle source and title (Plan 2)', () => {
       language: 'en',
       url: 'https://cdn.example/en.dfxp',
     });
+  });
+
+  it('asks for the manifest with the player it found, so it can be read from player memory', async () => {
+    const player = new FakePlayer();
+    player.textTrack = EN;
+    const getManifest = vi.fn(() => undefined);
+    const target = new EventTarget();
+    const stop = serveBridge(
+      target,
+      createPlayerMethods(() => player, () => '81091396', { getManifest, getMetadataVideo: () => undefined, getDocument: () => null }),
+    );
+    const client = createBridgeClient(target, 50);
+    cleanups.push(stop, () => client.dispose());
+    expect(await client.call('getSubtitleSource')).toBeNull();
+    expect(getManifest).toHaveBeenCalledWith('81091396', player);
   });
 
   it('no source for subtitles off, image-based subtitles, or an uncaptured track', async () => {
