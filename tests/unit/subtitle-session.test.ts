@@ -92,6 +92,21 @@ describe('subtitle session', () => {
     });
   });
 
+  it('a file that fails late or cannot be parsed is not used, and nothing is left unhandled', async () => {
+    for (const fetchText of [
+      () => new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timed out')), 0)),
+      async () => undefined as never,
+    ]) {
+      const { session, show, fetchText: original } = setup();
+      original.mockImplementation(fetchText);
+      show('Line 7', 22_100);
+      await settle();
+      await settle();
+      expect(session.describe(session.currentLine()!).fromTrack).toBe(false);
+      expect(session.trackLanguage()).toBeNull();
+    }
+  });
+
   it('reloads the subtitle file when the text track changes', async () => {
     const { session, show, state, fetchText } = setup({
       'https://cdn.example/en': dfxp(EN),

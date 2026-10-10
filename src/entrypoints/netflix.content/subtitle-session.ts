@@ -75,16 +75,19 @@ export function createSubtitleSession(deps: SubtitleSessionDeps): SubtitleSessio
     if (!source || source.trackId !== textTrack.trackId) return; // not captured yet; try again on the next line
     const loading: Track = { key, language: source.language, cues: null, state: 'loading' };
     track = loading;
-    deps.fetchText(source.url).then(
-      (body) => {
-        const cues = parseSubtitleFile(body);
-        loading.cues = cues;
-        loading.state = cues.length > 0 ? 'unchecked' : 'invalid';
-      },
-      () => {
-        loading.state = 'invalid';
-      },
-    );
+    // A fetch failure or timeout, or a file that can't be parsed, leaves the track unused.
+    deps
+      .fetchText(source.url)
+      .then(parseSubtitleFile)
+      .then(
+        (cues) => {
+          loading.cues = cues;
+          loading.state = cues.length > 0 ? 'unchecked' : 'invalid';
+        },
+        () => {
+          loading.state = 'invalid';
+        },
+      );
   };
 
   /** The file's cues, checked once against a line Netflix displayed (spec §8.2). */

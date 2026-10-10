@@ -77,7 +77,6 @@ describe('findCue / trackMatchesLine', () => {
     const untimed = observeAll([['Line 7', null as unknown as number]]);
     expect(trackMatchesLine(CUES, untimed.current()!)).toBe(false);
   });
-});
 
   it('picks the nearest of repeated identical lines', () => {
     const cues: Cue[] = [
@@ -88,6 +87,7 @@ describe('findCue / trackMatchesLine', () => {
     expect(findCue(cues, 'Yes.', 1900)).toBe(0);
     expect(findCue(cues, 'Yes.', 2600)).toBe(1); // 400 ms before the second, 600 ms after the first
   });
+});
 
 describe('describeLine', () => {
   it('uses up to 6 cues before and after, and the cue timing', () => {

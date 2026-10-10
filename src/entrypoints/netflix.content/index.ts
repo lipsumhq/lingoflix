@@ -18,8 +18,10 @@ import { runPendingSeek } from './pending-seek-runner';
 import { readDisplayedSubtitle, watchSubtitles } from './subtitle-dom';
 import { createSubtitleSession } from './subtitle-session';
 
+const SUBTITLE_FETCH_TIMEOUT_MS = 15_000;
+
 async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(SUBTITLE_FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Subtitle file: HTTP ${res.status}`);
   return res.text();
 }
@@ -59,6 +61,7 @@ export default defineContentScript({
       pause,
       getSettings: () => settings,
       isWatchPage,
+      overlayReady: () => overlay?.playerRect() != null,
       subtitleRects,
       cardElement: () => cardElement,
       isInOverlay: (target) => overlay?.contains(target) ?? false,
@@ -114,7 +117,8 @@ export default defineContentScript({
       ctx,
       createElement(OverlayApp, {
         store,
-        explain,
+        // Close on the card closes like Escape: hover waits until the pointer leaves the line.
+        explain: { regenerate: explain.regenerate, retry: explain.retry, askFollowUp: explain.askFollowUp, close: runtime.closeCard },
         playerRect: () => overlay?.playerRect() ?? null,
         openSettings: () => void sendToBackground({ type: 'open-options', hash: '#/settings' }),
         onCardElement: (element) => {
@@ -122,6 +126,7 @@ export default defineContentScript({
         },
       }),
     ).then((handle) => {
+      if (!ctx.isValid) return handle.remove(); // invalidated while mounting
       overlay = handle;
     });
 
@@ -130,6 +135,7 @@ export default defineContentScript({
       unwatch();
       stopSubtitles();
       runtime.teardown();
+      overlay?.remove(); // also stops autoMount watching the page for this orphaned script
       bridge.dispose();
       controller.teardown();
     });

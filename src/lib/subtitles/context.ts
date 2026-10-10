@@ -29,8 +29,9 @@ export interface LineDetails {
 
 /**
  * Index of the cue Netflix displays as `normalizedLine` around `atMs`, or -1. Netflix may show two cues at
- * once (two speakers), so a cue contained in the displayed text also matches; an exact match wins,
- * otherwise the earliest contained cue.
+ * once (two speakers), so a cue contained in the displayed text also matches. An exact match wins over a
+ * contained one; among several matches of the same kind (a line repeated nearby), the cue nearest `atMs`
+ * wins (0 while it is shown, else the gap to its nearer edge).
  */
 export function findCue(cues: readonly Cue[], normalizedLine: string, atMs: number, toleranceMs = CUE_MATCH_TOLERANCE_MS): number {
   if (!normalizedLine) return -1;

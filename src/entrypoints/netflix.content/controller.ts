@@ -9,6 +9,8 @@ import { applySubtitlesHidden } from './subtitle-visibility';
 const PLAYER_UNAVAILABLE_MESSAGE =
   "LingoFlix can't reach Netflix's player right now, so Netflix's own seek keys apply. Reloading the page may help.";
 const NO_LINE_MESSAGE = 'No subtitle line yet.';
+const NO_LINE_TO_EXPLAIN_MESSAGE = 'No subtitle line to explain yet.';
+const NO_OVERLAY_MESSAGE = "LingoFlix can't show its card on this page yet. Try reloading.";
 
 export interface ControllerDeps {
   doc: Document;
@@ -94,7 +96,9 @@ export function createController(deps: ControllerDeps): Controller {
     },
     explainLine: () => {
       if (!deps.overlay) return false;
-      if (!deps.overlay.explainShortcut()) deps.notifier.show('No subtitle line to explain yet.', 2000);
+      const result = deps.overlay.explainShortcut();
+      if (result === 'no-line') deps.notifier.show(NO_LINE_TO_EXPLAIN_MESSAGE, 2000);
+      else if (result === 'no-overlay') deps.notifier.show(NO_OVERLAY_MESSAGE, 3000);
       return true;
     },
   };

@@ -10,11 +10,13 @@ import { findEntry, saveExplanation } from '@/lib/study-log/store';
 beforeEach(() => fakeBrowser.reset());
 
 const KEY = 'sk-ant-api03-abcdefghijklmnop-wxyz';
+const FROM_PAGE = { fromExtensionPage: true };
+const FROM_NETFLIX = { fromExtensionPage: false };
 
 function handlerWith(checkKey: ClaudeClient['checkKey'] = async () => {}, over: Partial<MessageHandlerDeps> = {}) {
   const createClient = vi.fn((_key: string): ClaudeClient => ({ streamText: async () => '', checkKey }));
   const openOptions = vi.fn(async (_hash?: string) => {});
-  const handle = createMessageHandler({
+  const serve = createMessageHandler({
     getApiKey,
     setApiKey,
     removeApiKey,
@@ -24,6 +26,7 @@ function handlerWith(checkKey: ClaudeClient['checkKey'] = async () => {}, over: 
     openOptions,
     ...over,
   });
+  const handle = (message: unknown, context = FROM_PAGE) => serve(message, context);
   return { handle, createClient, openOptions };
 }
 
@@ -46,11 +49,34 @@ describe('API key requests', () => {
     expect(await handle({ type: 'api-key:status' })).toEqual({ set: false, masked: null });
   });
 
-  it('refuses keys that are empty or contain spaces', async () => {
+  it('refuses keys that are empty or contain spaces, invisible, or non-ASCII characters', async () => {
     const { handle } = handlerWith();
     expect(await handle({ type: 'api-key:set', key: '   ' })).toEqual({ ok: false });
     expect(await handle({ type: 'api-key:set', key: 'two words' })).toEqual({ ok: false });
+    expect(await handle({ type: 'api-key:set', key: 'sk-ant-\u200babc' })).toEqual({ ok: false });
+    expect(await handle({ type: 'api-key:set', key: 'sk-ant-\u00e9abc' })).toEqual({ ok: false });
     expect(await getApiKey()).toBeNull();
+  });
+
+  it('Test key refuses a typed key that does not look like one, without calling Anthropic', async () => {
+    const { handle, createClient } = handlerWith();
+    expect(await handle({ type: 'api-key:test', key: 'two words' })).toEqual({
+      result: 'rejected',
+      message: "That doesn't look like an API key.",
+    });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('only LingoFlix pages may set, remove, or test the key; anyone may read its status', async () => {
+    const { handle, createClient } = handlerWith();
+    await expect(handle({ type: 'api-key:set', key: KEY }, FROM_NETFLIX)).rejects.toThrow(/Not allowed/);
+    expect(await getApiKey()).toBeNull();
+    await setApiKey(KEY);
+    await expect(handle({ type: 'api-key:remove' }, FROM_NETFLIX)).rejects.toThrow(/Not allowed/);
+    await expect(handle({ type: 'api-key:test' }, FROM_NETFLIX)).rejects.toThrow(/Not allowed/);
+    expect(createClient).not.toHaveBeenCalled();
+    expect(await getApiKey()).toBe(KEY);
+    expect(await handle({ type: 'api-key:status' }, FROM_NETFLIX)).toEqual({ set: true, masked: maskApiKey(KEY) });
   });
 
   it('Test key: valid, rejected, or network — using the typed key, else the saved one', async () => {

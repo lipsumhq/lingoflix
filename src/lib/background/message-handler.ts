@@ -17,11 +17,22 @@ export interface MessageHandlerDeps {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** A pasted key: no spaces, a sane length. Anthropic's own check happens in Test key. */
-const looksLikeKey = (key: string) => key.length > 0 && key.length <= 300 && !/\s/.test(key);
+/**
+ * A pasted key: printable ASCII only (no spaces, no invisible or non-ASCII characters), a sane length.
+ * Anthropic's own check happens in Test key.
+ */
+const looksLikeKey = (key: string) => /^[\x21-\x7e]{1,300}$/.test(key);
+const NOT_A_KEY = "That doesn't look like an API key.";
 const OPTIONS_ROUTE = /^#\/[a-z-]*$/;
+/** Requests that change or use the key: only LingoFlix's own pages (options, popup) may send them. */
+const PAGE_ONLY = new Set(['api-key:set', 'api-key:remove', 'api-key:test']);
 
-export function createMessageHandler(deps: MessageHandlerDeps): (message: unknown) => Promise<unknown> {
+export interface MessageContext {
+  /** The sender is one of LingoFlix's own pages, not a content script on Netflix. */
+  fromExtensionPage: boolean;
+}
+
+export function createMessageHandler(deps: MessageHandlerDeps): (message: unknown, context: MessageContext) => Promise<unknown> {
   async function testKey(key: string | null): Promise<BackgroundResponse<'api-key:test'>> {
     if (!key) return { result: 'rejected', message: 'No API key to test.' };
     try {
@@ -35,9 +46,10 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
     }
   }
 
-  return async (message) => {
+  return async (message, context) => {
     const type = isRecord(message) ? message.type : undefined;
     const m = isRecord(message) ? message : {};
+    if (typeof type === 'string' && PAGE_ONLY.has(type) && !context.fromExtensionPage) throw new Error('Not allowed');
     switch (type) {
       case 'api-key:status': {
         const key = await deps.getApiKey();
@@ -54,6 +66,7 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
         return { ok: true } satisfies BackgroundResponse<'api-key:remove'>;
       case 'api-key:test': {
         const typed = typeof m.key === 'string' ? m.key.trim() : '';
+        if (typed && !looksLikeKey(typed)) return { result: 'rejected', message: NOT_A_KEY } satisfies BackgroundResponse<'api-key:test'>;
         return testKey(typed || (await deps.getApiKey()));
       }
       case 'log:find': {

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createController } from '@/entrypoints/netflix.content/controller';
+import type { ExplainShortcutResult } from '@/entrypoints/netflix.content/overlay/runtime';
 import { SUBTITLES_HIDDEN_ATTR } from '@/entrypoints/netflix.content/subtitle-visibility';
 import type { BridgeResult } from '@/lib/bridge/client';
 import { BridgeError } from '@/lib/bridge/protocol';
@@ -15,7 +16,7 @@ afterEach(() => {
 
 function setup(
   initial: Settings = DEFAULT_SETTINGS,
-  overlay?: { explainShortcut(): boolean; onKeyDown(e: KeyboardEvent): boolean },
+  overlay?: { explainShortcut(): ExplainShortcutResult; onKeyDown(e: KeyboardEvent): boolean },
 ) {
   const state = {
     seekResult: { ok: true, result: undefined } as BridgeResult<void>,
@@ -204,7 +205,7 @@ describe('content controller', () => {
   });
 
   it('Explain line (E) goes to the overlay; with no line it says so', () => {
-    const overlay = { explainShortcut: vi.fn(() => false), onKeyDown: vi.fn(() => false) };
+    const overlay = { explainShortcut: vi.fn((): ExplainShortcutResult => 'no-line'), onKeyDown: vi.fn(() => false) };
     const { notifier, netflix, press } = setup(DEFAULT_SETTINGS, overlay);
     const down = press('KeyE', 'e');
     expect(overlay.explainShortcut).toHaveBeenCalledTimes(1);
@@ -213,8 +214,25 @@ describe('content controller', () => {
     expect(netflix).not.toHaveBeenCalled();
   });
 
+  it('Explain line (E) without a mounted overlay suggests reloading; opening or closing says nothing', () => {
+    const overlay = { explainShortcut: vi.fn((): ExplainShortcutResult => 'no-overlay'), onKeyDown: vi.fn(() => false) };
+    const { notifier, netflix, press } = setup(DEFAULT_SETTINGS, overlay);
+    const down = press('KeyE', 'e');
+    expect(notifier.show).toHaveBeenCalledWith("LingoFlix can't show its card on this page yet. Try reloading.", 3000);
+    expect(down.defaultPrevented).toBe(true);
+    expect(netflix).not.toHaveBeenCalled();
+    for (const result of ['opened', 'closed'] as const) {
+      overlay.explainShortcut.mockReturnValueOnce(result);
+      press('KeyE', 'e');
+    }
+    expect(notifier.show).toHaveBeenCalledTimes(1);
+  });
+
   it('the overlay sees every keydown first (Escape closes the card)', () => {
-    const overlay = { explainShortcut: vi.fn(() => true), onKeyDown: vi.fn((e: KeyboardEvent) => e.code === 'Escape') };
+    const overlay = {
+      explainShortcut: vi.fn((): ExplainShortcutResult => 'opened'),
+      onKeyDown: vi.fn((e: KeyboardEvent) => e.code === 'Escape'),
+    };
     const { bridge, press } = setup(DEFAULT_SETTINGS, overlay);
     press('Escape');
     press('ArrowLeft');

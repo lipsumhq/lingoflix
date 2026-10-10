@@ -84,6 +84,11 @@ describe('explanation card', () => {
     expect(h.onFollowUp).toHaveBeenCalledWith('Is it rude?');
   });
 
+  it('a follow-up question is capped at the 2000 characters the background accepts', () => {
+    renderCard();
+    expect(screen.getByLabelText('Ask a follow-up question').getAttribute('maxlength')).toBe('2000');
+  });
+
   it('Enter during IME composition does not send', () => {
     const h = renderCard();
     const box = screen.getByLabelText('Ask a follow-up question');

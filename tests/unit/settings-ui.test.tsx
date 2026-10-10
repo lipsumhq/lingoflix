@@ -72,6 +72,27 @@ describe('Claude API key card', () => {
     expect(await screen.findByText("That doesn't look like an API key.")).toBeTruthy();
   });
 
+  it("says so when the background can't be reached to save, test, or remove the key", async () => {
+    const { send } = fakeBackground('sk-ant-good-9999');
+    const failing = vi.fn(async (m: { type: string }) => {
+      if (m.type === 'api-key:status') return send(m as never);
+      throw new Error('Could not establish connection. Receiving end does not exist.');
+    }) as unknown as typeof sendToBackground;
+    render(<ApiKeyCard send={failing} />);
+    const message = "Couldn't reach LingoFlix's background. Try again.";
+    fireEvent.change(await screen.findByLabelText('Claude API key'), { target: { value: 'sk-ant-new-1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect((await screen.findByRole('status')).textContent).toBe(message);
+    cleanup();
+
+    render(<ApiKeyCard send={failing} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Test key' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(message));
+    expect((screen.getByRole('button', { name: 'Test key' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(message));
+  });
+
   it('says so when the key status cannot be read', async () => {
     const send = vi.fn(async () => {
       throw new Error('no background');

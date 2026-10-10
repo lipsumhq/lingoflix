@@ -58,11 +58,21 @@ describe('runPendingSeek (Open at this moment)', () => {
     expect(state.seeks).toEqual([]);
   });
 
-  it('gives up after 30 s, and cancelling stops it', async () => {
+  it('keeps trying through a slow load (the pending seek lives 2 minutes)', async () => {
     vi.useFakeTimers();
     const slow = player();
     runPendingSeek('80077211', { take: async () => 5000, bridge: slow.bridge });
     await vi.advanceTimersByTimeAsync(31_000);
+    slow.state.ready = true;
+    await vi.advanceTimersByTimeAsync(500);
+    expect(slow.state.seeks).toEqual([5000]);
+  });
+
+  it('gives up after 2 minutes, and cancelling stops it', async () => {
+    vi.useFakeTimers();
+    const slow = player();
+    runPendingSeek('80077211', { take: async () => 5000, bridge: slow.bridge });
+    await vi.advanceTimersByTimeAsync(121_000);
     slow.state.ready = true;
     await vi.advanceTimersByTimeAsync(5000);
     expect(slow.state.seeks).toEqual([]);

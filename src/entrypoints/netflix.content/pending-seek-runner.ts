@@ -7,7 +7,8 @@ export interface PendingSeekDeps {
 }
 
 const RETRY_MS = 500;
-const GIVE_UP_MS = 30_000;
+/** As long as the pending seek itself stays fresh: it is taken at start, so a slow load must not lose it. */
+const GIVE_UP_MS = 120_000;
 const VERIFY_AFTER_MS = 1500;
 const VERIFY_SLACK_MS = 3000;
 

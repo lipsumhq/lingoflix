@@ -22,7 +22,9 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender.id !== browser.runtime.id) return undefined; // only LingoFlix's own pages and scripts
-    handle(message).then(sendResponse, (err: unknown) => sendResponse({ error: String(err) }));
+    // By URL, not by `sender.tab`: the options page opens in a tab too.
+    const fromExtensionPage = typeof sender.url === 'string' && sender.url.startsWith(browser.runtime.getURL('/'));
+    handle(message, { fromExtensionPage }).then(sendResponse, (err: unknown) => sendResponse({ error: String(err) }));
     return true; // respond asynchronously
   });
 

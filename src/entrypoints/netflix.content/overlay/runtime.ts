@@ -9,6 +9,8 @@ export interface OverlayRuntimeDeps {
   pause: Pick<PauseGuard, 'pause' | 'forget'>;
   getSettings(): Settings | null;
   isWatchPage(): boolean;
+  /** The overlay is mounted in the player, so a card would be seen. */
+  overlayReady(): boolean;
   subtitleRects(): readonly Pick<DOMRect, 'left' | 'top' | 'right' | 'bottom'>[];
   cardElement(): HTMLElement | null;
   isInOverlay(target: EventTarget | null): boolean;
@@ -16,14 +18,22 @@ export interface OverlayRuntimeDeps {
   schedule?(fn: () => void): void;
 }
 
+/** What the Explain shortcut did. */
+export type ExplainShortcutResult = 'opened' | 'closed' | 'no-line' | 'no-overlay';
+
 export interface OverlayRuntime {
   onMouseMove(event: MouseEvent): void;
   /** Register on window in the capture phase: a click outside a shortcut card closes it and is consumed. */
   onPointerDown(event: Event): void;
   /** Escape closes an open card. True when it handled the key. */
   onKeyDown(event: KeyboardEvent): boolean;
-  /** Explain line shortcut: opens a card for the current line, or closes the open one. False when there is no line. */
-  explainShortcut(): boolean;
+  /**
+   * Explain line shortcut: opens a card for the current line, or closes the open one. Does nothing while the
+   * overlay isn't mounted (no pause, no request for a card nobody would see).
+   */
+  explainShortcut(): ExplainShortcutResult;
+  /** The card's Close button: closes like Escape (hover waits until the pointer leaves the line). */
+  closeCard(): void;
   /** Settings changed: if hover is now off (spec §5.2 hidden subtitles), a hover card closes at once. */
   onSettingsChanged(): void;
   /** Spec §8.5: a new video closes the card without resuming the old one. */
@@ -66,10 +76,10 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
     stopSwallowing = stop;
   };
 
-  /** Hover can explain lines: LingoFlix is on, subtitles are shown, and this is a watch page. */
+  /** Hover can explain lines: LingoFlix is on, subtitles are shown, this is a watch page, and the overlay is mounted. */
   const hoverAllowed = () => {
     const s = deps.getSettings();
-    return !!s?.enabled && !s.subtitlesHidden && deps.isWatchPage();
+    return !!s?.enabled && !s.subtitlesHidden && deps.isWatchPage() && deps.overlayReady();
   };
   const hoverEnabled = () => hoverAllowed() && deps.explain.openedBy() !== 'shortcut';
 
@@ -144,14 +154,16 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
     explainShortcut() {
       if (deps.explain.isOpen()) {
         closeByUser();
-        return true;
+        return 'closed';
       }
+      if (!deps.overlayReady()) return 'no-overlay';
       hover.reset();
       if (deps.getSettings()?.pauseOnHover) deps.pause.pause();
-      const opened = deps.explain.open('shortcut');
-      if (!opened) deps.explain.close(); // resumes if we just paused
-      return opened;
+      if (deps.explain.open('shortcut')) return 'opened';
+      deps.explain.close(); // resumes if we just paused
+      return 'no-line';
     },
+    closeCard: closeByUser,
     onSettingsChanged: stopHoverIfOff,
     onVideoChange() {
       hover.reset();

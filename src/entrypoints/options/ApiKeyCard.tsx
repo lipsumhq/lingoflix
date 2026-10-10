@@ -10,6 +10,7 @@ type KeyStatus = { set: boolean; masked: string | null } | 'unknown' | null;
 type Note = { tone: 'good' | 'bad' | 'info'; text: string };
 
 const NOTE_COLOR: Record<Note['tone'], string> = { good: 'text-tint-ink', bad: 'text-danger', info: 'text-mute' };
+const UNREACHABLE: Note = { tone: 'bad', text: "Couldn't reach LingoFlix's background. Try again." };
 
 /** Spec §5.8: the key goes to the background worker; this page only ever sees whether one is set (masked). */
 export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
@@ -32,9 +33,14 @@ export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
   }, [refresh]);
 
   const save = async () => {
-    const res = await send({ type: 'api-key:set', key: draft });
-    if (!res.ok) {
-      setNote({ tone: 'bad', text: "That doesn't look like an API key." });
+    try {
+      const res = await send({ type: 'api-key:set', key: draft });
+      if (!res.ok) {
+        setNote({ tone: 'bad', text: "That doesn't look like an API key." });
+        return;
+      }
+    } catch {
+      setNote(UNREACHABLE);
       return;
     }
     setDraft('');
@@ -49,13 +55,20 @@ export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
     try {
       const res = await send({ type: 'api-key:test', ...(draft.trim() ? { key: draft.trim() } : {}) });
       setNote({ tone: res.result === 'valid' ? 'good' : 'bad', text: res.message });
+    } catch {
+      setNote(UNREACHABLE);
     } finally {
       setTesting(false);
     }
   };
 
   const remove = async () => {
-    await send({ type: 'api-key:remove' });
+    try {
+      await send({ type: 'api-key:remove' });
+    } catch {
+      setNote(UNREACHABLE);
+      return;
+    }
     setNote({ tone: 'info', text: 'Key removed.' });
     await refresh();
   };

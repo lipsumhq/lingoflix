@@ -72,6 +72,7 @@ function FollowUpBox({ busy, onSend }: { busy: boolean; onSend(question: string)
       <textarea
         aria-label="Ask a follow-up question"
         rows={1}
+        maxLength={2000}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKeyDown}

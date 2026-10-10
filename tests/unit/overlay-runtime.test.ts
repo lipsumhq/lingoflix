@@ -31,11 +31,13 @@ function setup(over: Partial<Settings> = {}, isInOverlay: (target: EventTarget |
   };
   const pause = { pause: vi.fn(), forget: vi.fn(() => order.push('forget')) };
   const settings: Settings = { ...DEFAULT_SETTINGS, ...over };
+  const env = { overlayReady: true };
   const runtime = createOverlayRuntime({
     explain,
     pause,
     getSettings: () => settings,
     isWatchPage: () => true,
+    overlayReady: () => env.overlayReady,
     subtitleRects: () => [LINE],
     cardElement: () => null,
     isInOverlay,
@@ -43,7 +45,7 @@ function setup(over: Partial<Settings> = {}, isInOverlay: (target: EventTarget |
   });
   cleanups.push(() => runtime.teardown());
   const move = (x: number, y: number) => runtime.onMouseMove({ clientX: x, clientY: y } as MouseEvent);
-  return { runtime, explain, pause, move, order, settings };
+  return { runtime, explain, pause, move, order, settings, env };
 }
 
 const CLICK_EVENTS = ['pointerdown', 'mousedown', 'mouseup', 'click'] as const;
@@ -125,11 +127,44 @@ describe('overlay runtime', () => {
 
   it('the Explain shortcut opens for the current line; pressing it again closes', () => {
     const { runtime, explain, pause } = setup();
-    expect(runtime.explainShortcut()).toBe(true);
+    expect(runtime.explainShortcut()).toBe('opened');
     expect(pause.pause).toHaveBeenCalled();
     expect(explain.open).toHaveBeenCalledWith('shortcut');
-    runtime.explainShortcut();
+    expect(runtime.explainShortcut()).toBe('closed');
     expect(explain.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('the Explain shortcut with no line to explain resumes and says so', () => {
+    const { runtime, explain } = setup();
+    explain.open.mockImplementationOnce(() => false);
+    expect(runtime.explainShortcut()).toBe('no-line');
+    expect(explain.close).toHaveBeenCalledTimes(1); // resumes if it just paused
+  });
+
+  it('without a mounted overlay, neither E nor hover pauses or asks Claude', () => {
+    const { runtime, explain, pause, move, env } = setup();
+    env.overlayReady = false;
+    expect(runtime.explainShortcut()).toBe('no-overlay');
+    move(200, 530);
+    vi.advanceTimersByTime(1000);
+    expect(explain.open).not.toHaveBeenCalled();
+    expect(pause.pause).not.toHaveBeenCalled();
+  });
+
+  it('Close on the card acts like a user close: hover waits until the pointer leaves the line', () => {
+    const { runtime, explain, move } = setup();
+    move(200, 530);
+    vi.advanceTimersByTime(400);
+    expect(explain.open).toHaveBeenCalledTimes(1);
+    runtime.closeCard();
+    expect(explain.close).toHaveBeenCalledTimes(1);
+    move(210, 530);
+    vi.advanceTimersByTime(1000);
+    expect(explain.open).toHaveBeenCalledTimes(1);
+    move(10, 10);
+    move(200, 530);
+    vi.advanceTimersByTime(400);
+    expect(explain.open).toHaveBeenCalledTimes(2);
   });
 
   it('Escape closes an open card and keeps the key from Netflix', () => {
