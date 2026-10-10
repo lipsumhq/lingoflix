@@ -18,6 +18,7 @@ export interface OverlayRuntimeDeps {
 
 export interface OverlayRuntime {
   onMouseMove(event: MouseEvent): void;
+  /** Register on window in the capture phase: a click outside a shortcut card closes it and is consumed. */
   onPointerDown(event: Event): void;
   /** Escape closes an open card. True when it handled the key. */
   onKeyDown(event: KeyboardEvent): boolean;
@@ -28,6 +29,10 @@ export interface OverlayRuntime {
   teardown(): void;
 }
 
+/** How long the rest of a dismissing click is swallowed, so a press that never becomes a click can't eat a later one. */
+const SWALLOW_CLICK_MS = 1000;
+const CLICK_REST = ['mousedown', 'mouseup', 'click'] as const;
+
 /** Spec §5.3: hover and shortcut behavior around the explanation card. */
 export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
   const schedule = deps.schedule ?? ((fn: () => void) => void requestAnimationFrame(() => fn()));
@@ -36,6 +41,28 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
   let queued = false;
   /** After a card is closed with a key or a click, hover waits until the pointer has left the line. */
   let waitForLeave = false;
+  let stopSwallowing: (() => void) | null = null;
+
+  /**
+   * The click that dismisses a shortcut card is consumed, like a modal's: otherwise it would also reach
+   * Netflix, which toggles playback on a click over the video, undoing the resume (spec §5.3 step 5).
+   */
+  const swallowRestOfClick = () => {
+    stopSwallowing?.();
+    const swallow = (event: Event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.type === 'click') stop();
+    };
+    const timer = setTimeout(() => stop(), SWALLOW_CLICK_MS);
+    const stop = () => {
+      clearTimeout(timer);
+      for (const type of CLICK_REST) window.removeEventListener(type, swallow, { capture: true });
+      if (stopSwallowing === stop) stopSwallowing = null;
+    };
+    for (const type of CLICK_REST) window.addEventListener(type, swallow, { capture: true });
+    stopSwallowing = stop;
+  };
 
   const hover = createHoverTracker({
     onEnter: () => {
@@ -81,7 +108,11 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
     },
     onPointerDown(event) {
       if (deps.explain.openedBy() !== 'shortcut') return;
-      if (!deps.isInOverlay(event.composedPath()[0] ?? null)) closeByUser();
+      if (deps.isInOverlay(event.composedPath()[0] ?? null)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeByUser();
+      swallowRestOfClick();
     },
     onKeyDown(event) {
       if (event.code !== 'Escape' || !deps.explain.isOpen()) return false;
@@ -109,6 +140,7 @@ export function createOverlayRuntime(deps: OverlayRuntimeDeps): OverlayRuntime {
     },
     teardown() {
       hover.reset();
+      stopSwallowing?.();
       deps.explain.close();
     },
   };

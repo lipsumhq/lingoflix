@@ -6,7 +6,7 @@ import { isolateEvents } from './isolate';
 import './overlay.css';
 
 export interface OverlayHandle {
-  /** True when the event target is inside LingoFlix's overlay. */
+  /** True when the event target is LingoFlix's overlay host or a node inside its shadow root. */
   contains(target: EventTarget | null): boolean;
   /** The player container's viewport rect (the card stays inside it). */
   playerRect(): DOMRect | null;
@@ -42,7 +42,8 @@ export async function mountOverlay(ctx: ContentScriptContext, app: ReactNode): P
   });
   ui.autoMount();
   return {
-    contains: (target) => !!host && target instanceof Node && (target === host || host.contains(target)),
+    contains: (target) =>
+      !!host && target instanceof Node && (target === host || host.contains(target) || !!host.shadowRoot?.contains(target)),
     playerRect: () => (anchor?.isConnected ? anchor.getBoundingClientRect() : null),
     remove: () => ui.remove(),
   };

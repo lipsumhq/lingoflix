@@ -86,7 +86,8 @@ export default defineContentScript({
     ctx.addEventListener(window, 'keydown', controller.onKeyDown, { capture: true });
     ctx.addEventListener(window, 'keyup', controller.onKeyUp, { capture: true });
     ctx.addEventListener(document, 'mousemove', runtime.onMouseMove, { passive: true });
-    ctx.addEventListener(document, 'pointerdown', runtime.onPointerDown);
+    // Window capture, before Netflix sees it: a click that dismisses a shortcut card is consumed.
+    ctx.addEventListener(window, 'pointerdown', runtime.onPointerDown, { capture: true });
     let lastVideoId = getVideoId();
     ctx.addEventListener(window, 'wxt:locationchange', () => {
       const videoId = getVideoId();
