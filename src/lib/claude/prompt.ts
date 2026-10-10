@@ -2,8 +2,10 @@ import { getExplanationLanguage } from '@/lib/languages';
 import type { TitleInfo } from '@/lib/netflix/title';
 import type { CardSections } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
-import type { DialogueContext } from '@/lib/subtitles/context';
+import type { DialogueContext, StoryLine } from '@/lib/subtitles/context';
 import { normalizeLine } from '@/lib/subtitles/cue';
+import { recentStoryText } from './context-blocks';
+import { MAX_SUGGESTIONS, SUGGEST_SAVES_TOOL_NAME } from './suggestions';
 
 /** Everything the overlay sends to explain a line (spec §7.2). Times are episode ms. */
 export interface ExplainRequest {
@@ -37,7 +39,19 @@ function languageName(code: string): string {
   return l.englishName === l.nativeName ? l.englishName : `${l.englishName} (${l.nativeName})`;
 }
 
-/** Spec §7.2 (and §7.3 when `followUp`). With every content section off, Meaning is still asked for. */
+/** v2 spec §5.3: asks for the suggest_saves call after the explanation. */
+export const SUGGEST_INSTRUCTION = (languageName: string): string =>
+  `After the explanation, call ${SUGGEST_SAVES_TOOL_NAME} once with up to ${MAX_SUGGESTIONS} items from the subtitle line that are worth studying: ` +
+  'single words, phrases, idioms, and the whole line if it is worth keeping as a sentence. ' +
+  'Use the exact text as it appears in the line. ' +
+  `Give each a meaning of at most 12 words in ${languageName}. ` +
+  'Leave out items the learner already saved. ' +
+  "Don't mention the tool or the suggestions in your explanation.";
+
+/**
+ * Spec §7.2 plus the suggest_saves instruction (v2 spec §5.3), or §7.3 when `followUp` (no suggestions).
+ * With every content section off, Meaning is still asked for.
+ */
 export function buildSystemPrompt(language: string, sections: CardSections, followUp = false): string {
   const lang = languageName(language);
   const enabled = CONTENT_SECTIONS.filter((id) => sections[id]);
@@ -52,7 +66,7 @@ export function buildSystemPrompt(language: string, sections: CardSections, foll
     `Use Markdown with exactly these sections, in this order, with headings written in ${lang}:\n${list}`;
   return followUp
     ? `${prompt}\n\nThe learner is now asking a follow-up question about this line. Answer it directly and briefly in ${lang}, without those sections.`
-    : prompt;
+    : `${prompt}\n\n${SUGGEST_INSTRUCTION(lang)}`;
 }
 
 /** `Title: Stranger Things, Season 1, Episode 3 "Holly, Jolly"` or `Movie: Roma`. */
@@ -69,15 +83,18 @@ export function titleLine(title: TitleInfo | null): string {
   return detail ? `Title: ${title.seriesTitle}, ${detail}` : `Title: ${title.seriesTitle}`;
 }
 
-export function buildUserMessage(request: Pick<ExplainRequest, 'phrase' | 'context' | 'title'>): string {
+/** Spec §7.2 layout, with the story just before it (v2 spec §5.2 chunk B) on top when there is one. */
+export function buildUserMessage(request: Pick<ExplainRequest, 'phrase' | 'context' | 'title'>, recent: readonly StoryLine[] = []): string {
   const indent = (line: string) => `  ${normalizeLine(line)}`;
-  return [
+  const dialogue = [
     titleLine(request.title),
     'Dialogue (the line to explain is marked with >>>):',
     ...request.context.before.map(indent),
     `>>> ${normalizeLine(request.phrase)}`,
     ...request.context.after.map(indent),
   ].join('\n');
+  const story = recentStoryText(recent);
+  return story ? `${story}\n\n${dialogue}` : dialogue;
 }
 
 const titleOf = (entry: Explanation): TitleInfo => ({
@@ -90,13 +107,16 @@ const titleOf = (entry: Explanation): TitleInfo => ({
   episodeTitle: entry.episodeTitle,
 });
 
-/** Spec §7.3: [user: initial request, assistant: explanation, user: q1, assistant: a1, …, user: new question]. */
-export function buildFollowUpMessages(entry: Explanation, question: string): ChatMessage[] {
+/**
+ * Spec §7.3: [user: initial request, assistant: explanation, user: q1, assistant: a1, …, user: new question].
+ * `recent` is chunk B of the story so far, on top of the first message as in the original request.
+ */
+export function buildFollowUpMessages(explanation: Explanation, question: string, recent: readonly StoryLine[] = []): ChatMessage[] {
   const messages: ChatMessage[] = [
-    { role: 'user', content: buildUserMessage({ phrase: entry.phrase, context: entry.context, title: titleOf(entry) }) },
-    { role: 'assistant', content: entry.response },
+    { role: 'user', content: buildUserMessage({ phrase: explanation.phrase, context: explanation.context, title: titleOf(explanation) }, recent) },
+    { role: 'assistant', content: explanation.response },
   ];
-  for (const followUp of entry.followUps) {
+  for (const followUp of explanation.followUps) {
     messages.push({ role: 'user', content: followUp.question }, { role: 'assistant', content: followUp.answer });
   }
   messages.push({ role: 'user', content: question.trim() });

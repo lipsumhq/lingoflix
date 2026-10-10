@@ -1,7 +1,14 @@
 import { APIConnectionError, APIConnectionTimeoutError, APIError } from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 import { toExplainError } from '@/lib/claude/errors';
-import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, titleLine, type ExplainRequest } from '@/lib/claude/prompt';
+import {
+  SUGGEST_INSTRUCTION,
+  buildFollowUpMessages,
+  buildSystemPrompt,
+  buildUserMessage,
+  titleLine,
+  type ExplainRequest,
+} from '@/lib/claude/prompt';
 import { parseClientMessage } from '@/lib/claude/protocol';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
@@ -26,12 +33,14 @@ describe('buildSystemPrompt', () => {
     );
     expect(prompt).toContain('Text in square brackets is a sound description or speaker label, not dialogue.');
     expect(prompt).toContain('Be concise: the learner has paused the video. Do not use em dashes; use a colon or a comma instead. ');
-    expect(prompt.endsWith(
+    expect(prompt).toContain(
       'with headings written in Korean (한국어):\n' +
         '1. Meaning: natural translation plus what the line means in this scene: tone, nuance, sarcasm, slang, register.\n' +
         '2. Key expressions: idioms, phrasal verbs, slang in the line, each with a short definition.\n' +
-        '3. How to use it: 2 or 3 everyday example sentences in the original language, each with a translation.',
-    )).toBe(true);
+        '3. How to use it: 2 or 3 everyday example sentences in the original language, each with a translation.\n\n' +
+        SUGGEST_INSTRUCTION('Korean (한국어)'),
+    );
+    expect(prompt.endsWith(SUGGEST_INSTRUCTION('Korean (한국어)'))).toBe(true);
     expect(prompt).not.toMatch(/[\u2013\u2014]/);
   });
 
@@ -46,6 +55,19 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt('ja', ALL, true)).toMatch(
       /The learner is now asking a follow-up question about this line\. Answer it directly and briefly in Japanese \(日本語\), without those sections\.$/,
     );
+  });
+
+  it('asks for suggest_saves after the explanation (v2 spec §5.3), never in follow-ups', () => {
+    expect(SUGGEST_INSTRUCTION('Korean (한국어)')).toBe(
+      'After the explanation, call suggest_saves once with up to 6 items from the subtitle line that are worth studying: ' +
+        'single words, phrases, idioms, and the whole line if it is worth keeping as a sentence. ' +
+        'Use the exact text as it appears in the line. ' +
+        'Give each a meaning of at most 12 words in Korean (한국어). ' +
+        'Leave out items the learner already saved. ' +
+        "Don't mention the tool or the suggestions in your explanation.",
+    );
+    expect(SUGGEST_INSTRUCTION('Korean (한국어)')).not.toMatch(/[–—]/);
+    expect(buildSystemPrompt('ko', ALL, true)).not.toContain('suggest_saves');
   });
 });
 
@@ -74,6 +96,28 @@ describe('user message', () => {
     expect(titleLine({ ...EPISODE, seasonNumber: null, episodeNumber: null, episodeTitle: null })).toBe('Title: Stranger Things');
     expect(titleLine(null)).toBe('Title: unknown');
   });
+
+  it('puts the story just before the dialogue on top (chunk B, v2 spec §5.1)', () => {
+    const request = { phrase: 'Line', context: { before: ['Before'], after: [] }, title: EPISODE };
+    expect(
+      buildUserMessage(request, [
+        { startMs: 1000, text: 'Earlier one.' },
+        { startMs: 2000, text: 'Earlier two.' },
+      ]),
+    ).toBe(
+      [
+        'Just before:',
+        '  Earlier one.',
+        '  Earlier two.',
+        '',
+        'Title: Stranger Things, Season 1, Episode 3 "Holly, Jolly"',
+        'Dialogue (the line to explain is marked with >>>):',
+        '  Before',
+        '>>> Line',
+      ].join('\n'),
+    );
+    expect(buildUserMessage(request, [])).toBe(buildUserMessage(request));
+  });
 });
 
 describe('buildFollowUpMessages', () => {
@@ -89,6 +133,20 @@ describe('buildFollowUpMessages', () => {
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user']);
     expect(messages[0]!.content).toContain('>>> Line');
     expect(messages.slice(1).map((m) => m.content)).toEqual(['Explanation', 'Q1', 'A1', 'Q2']);
+  });
+
+  it('puts the story just before the dialogue on top of the first message too', () => {
+    const explanation = {
+      phrase: 'Line',
+      response: 'Explanation',
+      followUps: [],
+      context: { before: [], after: [] },
+      suggestions: [],
+      ...EPISODE,
+    } as unknown as Explanation;
+    const messages = buildFollowUpMessages(explanation, 'Q', [{ startMs: 0, text: 'Earlier.' }]);
+    expect(messages[0]!.content.startsWith('Just before:\n  Earlier.\n\nTitle: Stranger Things')).toBe(true);
+    expect(buildFollowUpMessages(explanation, 'Q')[0]!.content.startsWith('Title: ')).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { episodeLabel, formatTimestamp, seasonLabel } from '@/lib/study-log/format';
+import { episodeCode, episodeLabel, formatTimestamp, seasonLabel, whereLabel } from '@/lib/study-log/format';
 import { groupStudyLog } from '@/lib/study-log/group';
 import {
   appendFollowUp,
@@ -245,5 +245,21 @@ describe('labels', () => {
     expect(seasonLabel(null)).toBe('Episodes');
     expect(episodeLabel({ episodeNumber: 3, episodeTitle: 'Holly, Jolly' })).toBe('E3 · Holly, Jolly');
     expect(episodeLabel({ episodeNumber: null, episodeTitle: null })).toBe('Episode');
+  });
+});
+
+describe('where an item is from (v2 spec §5.2, §6.1)', () => {
+  it('codes episodes as S1 E3 and leaves movies blank', () => {
+    expect(episodeCode({ kind: 'episode', seasonNumber: 1, episodeNumber: 3 })).toBe('S1 E3');
+    expect(episodeCode({ kind: 'episode', seasonNumber: null, episodeNumber: 3 })).toBe('E3');
+    expect(episodeCode({ kind: 'episode', seasonNumber: 2, episodeNumber: null })).toBe('S2');
+    expect(episodeCode({ kind: 'episode', seasonNumber: null, episodeNumber: null })).toBe('');
+    expect(episodeCode({ kind: 'movie', seasonNumber: null, episodeNumber: null })).toBe('');
+  });
+
+  it('labels the show with its code, or the movie by its title', () => {
+    expect(whereLabel({ kind: 'episode', seriesTitle: 'Stranger Things', seasonNumber: 1, episodeNumber: 3 })).toBe('Stranger Things S1 E3');
+    expect(whereLabel({ kind: 'episode', seriesTitle: 'Stranger Things', seasonNumber: null, episodeNumber: null })).toBe('Stranger Things');
+    expect(whereLabel({ kind: 'movie', seriesTitle: 'Roma', seasonNumber: null, episodeNumber: null })).toBe('Roma');
   });
 });
