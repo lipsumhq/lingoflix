@@ -1,4 +1,11 @@
-export type ActionId = 'rewind' | 'forward' | 'toggleSubtitles';
+export type ActionId =
+  | 'rewind'
+  | 'forward'
+  | 'previousLine'
+  | 'nextLine'
+  | 'replayLine'
+  | 'toggleSubtitles'
+  | 'explainLine';
 
 export interface Binding {
   code: string;
@@ -10,12 +17,24 @@ export interface Binding {
 
 export type ShortcutMap = Record<ActionId, Binding | null>;
 
-export const ACTION_IDS: readonly ActionId[] = ['rewind', 'forward', 'toggleSubtitles'];
+export const ACTION_IDS: readonly ActionId[] = [
+  'rewind',
+  'forward',
+  'previousLine',
+  'nextLine',
+  'replayLine',
+  'toggleSubtitles',
+  'explainLine',
+];
 
 export const ACTION_LABELS: Record<ActionId, string> = {
   rewind: 'Rewind',
   forward: 'Forward',
+  previousLine: 'Previous line',
+  nextLine: 'Next line',
+  replayLine: 'Replay line',
   toggleSubtitles: 'Show / hide subtitles',
+  explainLine: 'Explain line',
 };
 
 export function key(code: string, mods: Partial<Omit<Binding, 'code'>> = {}): Binding {
@@ -25,7 +44,11 @@ export function key(code: string, mods: Partial<Omit<Binding, 'code'>> = {}): Bi
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
   rewind: key('ArrowLeft'),
   forward: key('ArrowRight'),
+  previousLine: key('KeyA'),
+  nextLine: key('KeyD'),
+  replayLine: key('KeyR'),
   toggleSubtitles: key('KeyC'),
+  explainLine: key('KeyE'),
 };
 
 /** Unmodified keys Netflix's player uses; binding one of them overrides Netflix (warn, don't block). */

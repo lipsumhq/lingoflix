@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 function setup(overrides: Partial<KeyboardDeps> = {}) {
-  const handlers = { rewind: vi.fn(), forward: vi.fn(), toggleSubtitles: vi.fn() };
+  const handlers = { rewind: vi.fn(), forward: vi.fn(), toggleSubtitles: vi.fn(), replayLine: vi.fn(), explainLine: vi.fn(), nextLine: vi.fn() };
   const state: { settings: Settings | null; watch: boolean } = { settings: DEFAULT_SETTINGS, watch: true };
   const { onKeyDown, onKeyUp } = createKeyboardHandlers({
     getSettings: () => state.settings,
@@ -162,5 +162,18 @@ describe('keyboard shortcuts', () => {
     press({ code: 'ArrowLeft', key: 'ArrowLeft' });
     expect(handlers.rewind).toHaveBeenCalledTimes(1);
     expect(netflix).toHaveBeenCalledTimes(2); // ArrowLeft is no longer ours
+  });
+
+  it('auto-repeat: line jumps repeat, replay and explain do not', () => {
+    const { handlers, press } = setup();
+    press({ code: 'KeyD', key: 'd' });
+    press({ code: 'KeyD', key: 'd', repeat: true });
+    expect(handlers.nextLine).toHaveBeenCalledTimes(2);
+    press({ code: 'KeyR', key: 'r' });
+    press({ code: 'KeyR', key: 'r', repeat: true });
+    press({ code: 'KeyE', key: 'e' });
+    press({ code: 'KeyE', key: 'e', repeat: true });
+    expect(handlers.replayLine).toHaveBeenCalledTimes(1);
+    expect(handlers.explainLine).toHaveBeenCalledTimes(1);
   });
 });

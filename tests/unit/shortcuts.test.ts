@@ -19,13 +19,17 @@ const ev = (code: string, mods: { ctrl?: boolean; alt?: boolean; shift?: boolean
 });
 
 describe('defaults', () => {
-  it('binds rewind ←, forward →, toggle subtitles C', () => {
+  it('binds ← → A D R C E', () => {
     expect(DEFAULT_SHORTCUTS).toEqual({
       rewind: key('ArrowLeft'),
       forward: key('ArrowRight'),
+      previousLine: key('KeyA'),
+      nextLine: key('KeyD'),
+      replayLine: key('KeyR'),
       toggleSubtitles: key('KeyC'),
+      explainLine: key('KeyE'),
     });
-    expect(ACTION_IDS).toEqual(['rewind', 'forward', 'toggleSubtitles']);
+    expect(ACTION_IDS).toEqual(['rewind', 'forward', 'previousLine', 'nextLine', 'replayLine', 'toggleSubtitles', 'explainLine']);
   });
 });
 

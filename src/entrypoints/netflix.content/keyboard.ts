@@ -14,7 +14,7 @@ export interface KeyboardDeps {
 }
 
 /** Actions that must not auto-repeat while the key is held. */
-const NO_REPEAT: ReadonlySet<ActionId> = new Set<ActionId>(['toggleSubtitles']);
+const NO_REPEAT: ReadonlySet<ActionId> = new Set<ActionId>(['toggleSubtitles', 'replayLine', 'explainLine']);
 
 export function isTypingTarget(event: Event): boolean {
   const el = event.composedPath()[0] as { tagName?: string; isContentEditable?: boolean } | undefined;

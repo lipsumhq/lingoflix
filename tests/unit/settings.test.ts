@@ -102,3 +102,70 @@ describe('storage', () => {
     unwatch();
   });
 });
+
+describe('explanation and line settings', () => {
+  it('defaults: pause on hover on, every card section on, seconds mode, language from the browser UI', () => {
+    const s = normalizeSettings(undefined, 'ko-KR');
+    expect(s.pauseOnHover).toBe(true);
+    expect(s.cardSections).toEqual({ meaning: true, keyExpressions: true, howToUse: true, followUp: true });
+    expect(s.rewindMode).toBe('seconds');
+    expect(s.forwardMode).toBe('seconds');
+    expect(s.explanationLanguage).toBe('ko');
+  });
+
+  it('keeps valid values and repairs invalid ones field by field', () => {
+    const s = normalizeSettings(
+      {
+        pauseOnHover: false,
+        explanationLanguage: 'ja',
+        rewindMode: 'line',
+        forwardMode: 'sentence',
+        cardSections: { meaning: false, howToUse: 'no', junk: 1 },
+      },
+      'en',
+    );
+    expect(s.pauseOnHover).toBe(false);
+    expect(s.explanationLanguage).toBe('ja');
+    expect(s.rewindMode).toBe('line');
+    expect(s.forwardMode).toBe('seconds');
+    expect(s.cardSections).toEqual({ meaning: false, keyExpressions: true, howToUse: true, followUp: true });
+    expect(normalizeSettings({ explanationLanguage: 'klingon' }, 'fr-CA').explanationLanguage).toBe('fr');
+  });
+
+  it('gives existing users the new shortcuts unless the key is already theirs', () => {
+    const fresh = normalizeSettings({ shortcuts: { rewind: key('ArrowLeft') } }, 'en');
+    expect(fresh.shortcuts.explainLine).toEqual(key('KeyE'));
+    expect(fresh.shortcuts.previousLine).toEqual(key('KeyA'));
+    const taken = normalizeSettings({ shortcuts: { rewind: key('KeyE') } }, 'en');
+    expect(taken.shortcuts.explainLine).toBeNull();
+  });
+});
+
+describe('writing keeps fields from a newer LingoFlix (synced from another computer)', () => {
+  const newer = {
+    enabled: true,
+    future: 42,
+    shortcuts: { shadowLine: key('KeyV') },
+    cardSections: { glossary: false },
+  };
+
+  it('updateSettings', async () => {
+    await fakeBrowser.storage.sync.set({ settings: newer });
+    await updateSettings((s) => ({ ...s, enabled: false }));
+    const { settings: raw } = (await fakeBrowser.storage.sync.get('settings')) as { settings: Record<string, any> };
+    expect(raw.enabled).toBe(false);
+    expect(raw.future).toBe(42);
+    expect(raw.shortcuts.shadowLine).toEqual(key('KeyV'));
+    expect(raw.shortcuts.rewind).toEqual(key('ArrowLeft'));
+    expect(raw.cardSections).toEqual({ glossary: false, meaning: true, keyExpressions: true, howToUse: true, followUp: true });
+  });
+
+  it('saveSettings', async () => {
+    await fakeBrowser.storage.sync.set({ settings: newer });
+    await saveSettings({ ...DEFAULT_SETTINGS, rewindSeconds: 3 });
+    const { settings: raw } = (await fakeBrowser.storage.sync.get('settings')) as { settings: Record<string, any> };
+    expect(raw.future).toBe(42);
+    expect(raw.rewindSeconds).toBe(3);
+    expect(raw.shortcuts.shadowLine).toEqual(key('KeyV'));
+  });
+});

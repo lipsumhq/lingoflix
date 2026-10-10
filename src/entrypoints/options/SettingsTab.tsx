@@ -1,4 +1,17 @@
-import { Captions, FastForward, Monitor, Moon, Rewind, RotateCcw, Sun, type LucideIcon } from 'lucide-react';
+import {
+  Captions,
+  FastForward,
+  MessageSquareText,
+  Monitor,
+  Moon,
+  Repeat,
+  Rewind,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
+  Sun,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Toggle } from '@/components/Toggle';
@@ -18,7 +31,19 @@ const THEME_OPTIONS = [
 const ACTION_ICONS: Record<ActionId, ReactNode> = {
   rewind: <Rewind size={20} strokeWidth={2.5} fill="currentColor" aria-hidden />,
   forward: <FastForward size={20} strokeWidth={2.5} fill="currentColor" aria-hidden />,
+  previousLine: <SkipBack size={20} strokeWidth={2.5} fill="currentColor" aria-hidden />,
+  nextLine: <SkipForward size={20} strokeWidth={2.5} fill="currentColor" aria-hidden />,
+  replayLine: <Repeat size={20} strokeWidth={2.5} aria-hidden />,
   toggleSubtitles: <Captions size={20} strokeWidth={2.5} aria-hidden />,
+  explainLine: <MessageSquareText size={20} strokeWidth={2.5} aria-hidden />,
+};
+
+const ACTION_HINTS: Partial<Record<ActionId, string>> = {
+  previousLine: 'Back to the line before.',
+  nextLine: 'On to the next line.',
+  replayLine: 'Hear the current line again.',
+  toggleSubtitles: 'Test your ears, then peek.',
+  explainLine: 'Explain the current line.',
 };
 
 export function SettingsTab() {
@@ -51,7 +76,7 @@ export function SettingsTab() {
           />
         </>
       );
-    return 'Test your ears, then peek.';
+    return ACTION_HINTS[action] ?? null;
   };
 
   return (
