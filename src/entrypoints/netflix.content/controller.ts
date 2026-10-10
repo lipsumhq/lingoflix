@@ -2,6 +2,7 @@ import type { BridgeClient } from '@/lib/bridge/client';
 import type { Settings } from '@/lib/settings';
 import { createKeyboardHandlers, type ActionHandlers } from './keyboard';
 import type { Notifier } from './notice';
+import type { OverlayRuntime } from './overlay/runtime';
 import type { SubtitleSession } from './subtitle-session';
 import { applySubtitlesHidden } from './subtitle-visibility';
 
@@ -19,6 +20,8 @@ export interface ControllerDeps {
   getVideoId(): string | null;
   /** False once the extension was reloaded, updated, or disabled and this script is orphaned. */
   isValid(): boolean;
+  /** The explanation overlay; it sees every keydown first (Escape closes its card). */
+  overlay?: Pick<OverlayRuntime, 'explainShortcut' | 'onKeyDown'>;
 }
 
 export interface Controller {
@@ -89,6 +92,11 @@ export function createController(deps: ControllerDeps): Controller {
         deps.notifier.show(s.subtitlesHidden ? 'Subtitles hidden' : 'Subtitles shown', 1200);
       });
     },
+    explainLine: () => {
+      if (!deps.overlay) return false;
+      if (!deps.overlay.explainShortcut()) deps.notifier.show('No subtitle line to explain yet.', 2000);
+      return true;
+    },
   };
 
   const keys = createKeyboardHandlers({
@@ -103,5 +111,10 @@ export function createController(deps: ControllerDeps): Controller {
     handlers,
   });
 
-  return { applySettings, onKeyDown: keys.onKeyDown, onKeyUp: keys.onKeyUp, teardown };
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!tornDown && deps.overlay?.onKeyDown(event)) return;
+    keys.onKeyDown(event);
+  };
+
+  return { applySettings, onKeyDown, onKeyUp: keys.onKeyUp, teardown };
 }

@@ -13,7 +13,10 @@ afterEach(() => {
   document.documentElement.removeAttribute(SUBTITLES_HIDDEN_ATTR);
 });
 
-function setup(initial: Settings = DEFAULT_SETTINGS) {
+function setup(
+  initial: Settings = DEFAULT_SETTINGS,
+  overlay?: { explainShortcut(): boolean; onKeyDown(e: KeyboardEvent): boolean },
+) {
   const state = {
     seekResult: { ok: true, result: undefined } as BridgeResult<void>,
     valid: true,
@@ -40,6 +43,7 @@ function setup(initial: Settings = DEFAULT_SETTINGS) {
     isWatchPage: () => true,
     getVideoId: () => '82028220',
     isValid: () => state.valid,
+    overlay,
   });
   controller.applySettings(initial);
 
@@ -197,5 +201,24 @@ describe('content controller', () => {
     const down = press('KeyA', 'a');
     expect(down.defaultPrevented).toBe(false);
     expect(netflix).toHaveBeenCalledTimes(2);
+  });
+
+  it('Explain line (E) goes to the overlay; with no line it says so', () => {
+    const overlay = { explainShortcut: vi.fn(() => false), onKeyDown: vi.fn(() => false) };
+    const { notifier, netflix, press } = setup(DEFAULT_SETTINGS, overlay);
+    const down = press('KeyE', 'e');
+    expect(overlay.explainShortcut).toHaveBeenCalledTimes(1);
+    expect(notifier.show).toHaveBeenCalledWith('No subtitle line to explain yet.', 2000);
+    expect(down.defaultPrevented).toBe(true);
+    expect(netflix).not.toHaveBeenCalled();
+  });
+
+  it('the overlay sees every keydown first (Escape closes the card)', () => {
+    const overlay = { explainShortcut: vi.fn(() => true), onKeyDown: vi.fn((e: KeyboardEvent) => e.code === 'Escape') };
+    const { bridge, press } = setup(DEFAULT_SETTINGS, overlay);
+    press('Escape');
+    press('ArrowLeft');
+    expect(overlay.onKeyDown).toHaveBeenCalledTimes(2);
+    expect(bridge.callSync.mock.calls).toEqual([['seekBy', -5_000]]);
   });
 });
