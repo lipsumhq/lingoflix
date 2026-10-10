@@ -126,12 +126,14 @@ dialog that says both the Study Log and the explanation history will be deleted.
 
 - The `explain` port's `done` message carries the stored `Explanation` (now with `suggestions`) and
   `savedKeys: string[]`: the item index keys (§3.2) of this line that are already saved.
-- New background requests (`src/lib/messages.ts`, served by `src/lib/background/message-handler.ts`, accepted
+- Background requests (`src/lib/messages.ts`, served by `src/lib/background/message-handler.ts`, accepted
   from the Netflix content script and extension pages):
-  - `item:save { explanationId, suggestion }` → `{ item }` (creates or returns the existing item; source fields
+  - `explanation:find { videoId, language, phrase }` → `{ explanation, savedKeys }` (replaces `log:find`; used
+    when a stored explanation is shown).
+  - `item:save { explanationId, suggestion }` → `{ key }` (creates or keeps the existing item; source fields
     come from the stored `Explanation`, never from the page).
-  - `item:remove { itemId }` → `{ ok: true }`.
-  - `items:saved-keys { explanationId }` → `{ savedKeys }` (used when a stored explanation is shown).
+  - `item:remove { explanationId, suggestion }` → `{ key }`.
+  - Both accept only a suggestion that is one of that explanation's card rows (§4.1); anything else is refused.
 
 ## 5. Claude integration changes
 
@@ -239,10 +241,11 @@ The explanation itself is saved and shown exactly as today.
 
 ### 5.5 Client interface
 
-`ClaudeClient.streamText` becomes `stream(params, onText, signal) → { text: string; toolInputs: unknown[] }`, where
-`params.system` is `string | Array<{ text: string; cache: boolean }>` and `params.tools` is optional. The SDK wrapper
-maps `cache: true` to `cache_control: { type: 'ephemeral' }`, keeps `maxRetries: 0`, and reads tool inputs from the
-final message's `tool_use` blocks named `suggest_saves`. Error mapping (main spec §7.4) is unchanged.
+`ClaudeClient.streamText` becomes `stream(params, onText, signal) → { text: string; toolCalls: Array<{ name: string;
+input: unknown }> }`, where `params.system` is `string | Array<{ text: string; cache: boolean }>` and `params.tools`
+is optional. The SDK wrapper maps `cache: true` to `cache_control: { type: 'ephemeral' }`, keeps `maxRetries: 0`, and
+reads tool calls from the final message's `tool_use` blocks; when the message stopped at `max_tokens`, it returns
+no tool calls (a cut-off call is only partly parsed). Error mapping (main spec §7.4) is unchanged.
 
 ## 6. The Study Log page
 
