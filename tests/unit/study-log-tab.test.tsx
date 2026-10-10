@@ -58,6 +58,18 @@ describe('Study Log tab', () => {
     expect(within(items[1]!).getByText('30:34')).toBeTruthy();
   });
 
+  it('counts lines on the series and season rows too', async () => {
+    await seed();
+    render(<StudyLogTab />);
+    const tree = await screen.findByRole('navigation', { name: 'Shows and movies' });
+    const seriesRow = within(tree).getByText('Stranger Things').parentElement!;
+    expect(within(seriesRow).getByText('3')).toBeTruthy();
+    expect(within(seriesRow).getByText('3 lines')).toBeTruthy();
+    const seasonRow = within(tree).getByText('Season 1').parentElement!;
+    expect(within(seasonRow).getByText('3')).toBeTruthy();
+    expect(within(seasonRow).getByText('3 lines')).toBeTruthy();
+  });
+
   it('expands an explanation', async () => {
     await seed();
     render(<StudyLogTab />);

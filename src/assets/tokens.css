@@ -18,6 +18,7 @@
   --lf-brand-edge: light-dark(#e0a800, #b88a00);
   --lf-on-brand: #3a2e00;
   --lf-danger: light-dark(#c62828, #ff8a80);
+  --lf-on-danger: light-dark(#ffffff, #3a0a06);
   --lf-focus: light-dark(#3a2e00, #ffc800);
 }
 :root[data-theme='light'] {

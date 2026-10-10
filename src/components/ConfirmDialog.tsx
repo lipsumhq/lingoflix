@@ -37,7 +37,7 @@ export function ConfirmDialog({ title, body, confirmLabel = 'Delete', onConfirm,
           <button
             type="button"
             onClick={onConfirm}
-            className={`inline-flex items-center rounded-2xl bg-danger px-4 py-2 text-xs font-extrabold tracking-wider text-white uppercase shadow-[0_3px_0_rgb(0_0_0/0.25)] active:translate-y-[3px] active:shadow-none ${focusRing}`}
+            className={`inline-flex items-center rounded-2xl bg-danger px-4 py-2 text-xs font-extrabold tracking-wider text-on-danger uppercase shadow-[0_3px_0_rgb(0_0_0/0.25)] active:translate-y-[3px] active:shadow-none ${focusRing}`}
           >
             {confirmLabel}
           </button>

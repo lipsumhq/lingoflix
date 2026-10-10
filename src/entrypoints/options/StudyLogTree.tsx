@@ -35,6 +35,18 @@ function NodeButton({ label, count, active, onClick }: { label: string; count: n
   );
 }
 
+/** A row's line count: the pill is what you see, "N lines" is what a screen reader says. */
+function Count({ n }: { n: number }) {
+  return (
+    <>
+      <span aria-hidden="true" className={countPill}>
+        {n}
+      </span>
+      <span className="sr-only">{lines(n)}</span>
+    </>
+  );
+}
+
 /** Spec §5.5: Series → Season → Episode with counts, plus Movies. */
 export function StudyLogTree({ tree, selected, onSelect, onDeleteSeries, onDeleteSeason }: StudyLogTreeProps) {
   return (
@@ -43,6 +55,7 @@ export function StudyLogTree({ tree, selected, onSelect, onDeleteSeries, onDelet
         <div key={series.key}>
           <div className="flex items-center gap-1">
             <p className="min-w-0 flex-1 truncate text-[15px] font-black">{series.title}</p>
+            <Count n={series.count} />
             <button type="button" aria-label={`Delete ${series.title}`} onClick={() => onDeleteSeries(series)} className={trashButton}>
               <Trash2 size={14} strokeWidth={2.5} aria-hidden />
             </button>
@@ -51,6 +64,7 @@ export function StudyLogTree({ tree, selected, onSelect, onDeleteSeries, onDelet
             <div key={season.key} className="mt-1.5">
               <div className="flex items-center gap-1 pl-1">
                 <p className="flex-1 text-[12px] font-extrabold tracking-wide text-mute uppercase">{seasonLabel(season.seasonNumber)}</p>
+                <Count n={season.count} />
                 <button
                   type="button"
                   aria-label={`Delete ${series.title} ${seasonLabel(season.seasonNumber)}`}
