@@ -159,8 +159,8 @@ Empty parts are left out (an empty block is never sent). Follow-up requests send
 `start` and `follow-up` message: every subtitle line whose start is before the first of the 6 lines before the target.
 The source is the validated subtitle file (Plan 2 `subtitle-session`), else the rolling history of observed lines,
 whose capacity grows from 50 to 600 lines. Nothing at or after the target line's context window is ever included,
-so Claude never sees beyond the 6 lines after the target (no spoilers). It is capped at the last 600 lines and
-48 000 characters (oldest dropped first). When the setting "Send the story so far" is off, `storySoFar` is `[]`.
+so Claude never sees beyond the 6 lines after the target (no spoilers). The content script sends at most the last
+1000 such lines. When the setting "Send the story so far" is off, `storySoFar` is `[]`.
 
 The background splits it at the last 5-minute boundary before the target line (`floor(targetStartMs / 300000) * 300000`):
 
@@ -168,6 +168,9 @@ The background splits it at the last 5-minute boundary before the target line (`
   `Story so far in this episode (subtitle lines before the dialogue below, oldest first):` followed by one line each.
   Its text is identical for every request in the same 5-minute window, so it is read from cache.
 - **chunk B** = the remaining lines, placed at the top of the user message under `Just before:`.
+
+Caps are applied after the split, so chunk A stays identical within a window: chunk A keeps its last 600 lines and
+at most 48 000 characters (oldest dropped first); chunk B keeps its last 200 lines.
 
 Prompt caching only applies above the model's minimum cacheable length; shorter prefixes are simply sent uncached.
 
