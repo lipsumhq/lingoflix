@@ -10,7 +10,8 @@ export interface ObservedLine {
   hiddenAtMs: number | null;
 }
 
-export const HISTORY_LIMIT = 50;
+/** Enough lines to send as the story so far when there is no subtitle file (v2 spec §5.2). */
+export const HISTORY_LIMIT = 600;
 
 export interface LineHistory {
   /** Report what Netflix displays now ("" for nothing). Repeats of the same text are ignored. */

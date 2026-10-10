@@ -16,7 +16,7 @@ interface ExplanationsCardProps {
   update(fn: (s: Settings) => Settings): Promise<void>;
 }
 
-/** Spec §5.8: explanation language, card sections, Pause on hover. */
+/** Spec §5.8: explanation language, card sections, Pause on hover; v2 spec §8: Send the story so far. */
 export function ExplanationsCard({ settings, update }: ExplanationsCardProps) {
   const languageId = useId();
   const languageHint = useId();
@@ -61,6 +61,15 @@ export function ExplanationsCard({ settings, update }: ExplanationsCardProps) {
           description="Pause the video while you read the card."
           checked={settings.pauseOnHover}
           onChange={(pauseOnHover) => void update((s) => ({ ...s, pauseOnHover }))}
+        />
+      </div>
+
+      <div className="border-t-2 border-soft py-3">
+        <Toggle
+          label="Send the story so far"
+          description="Better explanations; more tokens late in an episode."
+          checked={settings.sendStorySoFar}
+          onChange={(sendStorySoFar) => void update((s) => ({ ...s, sendStorySoFar }))}
         />
       </div>
 

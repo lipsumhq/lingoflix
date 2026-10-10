@@ -142,6 +142,24 @@ describe('subtitle session', () => {
     expect(file.session.lineTarget('next')).toBe(25_000);
   });
 
+  it('story so far: from the file once it matches, else from the lines seen; never the context window', async () => {
+    const file = setup();
+    file.show('Line 6', 19_100);
+    file.show('Line 10', 31_100);
+    await settle();
+    const target = file.session.currentLine()!;
+    expect(file.session.storySoFar(target)).toEqual([0, 1, 2, 3].map((i) => ({ startMs: 1000 + i * 3000, text: `Line ${i}` })));
+
+    const seen = setup({});
+    for (let i = 0; i < 9; i++) seen.show(`Seen ${i}`, 10_000 + i * 2000);
+    await settle();
+    const last = seen.session.currentLine()!; // Seen 8; its context before is Seen 2–7
+    expect(seen.session.storySoFar(last)).toEqual([
+      { startMs: 9700, text: 'Seen 0' },
+      { startMs: 11_700, text: 'Seen 1' },
+    ]);
+  });
+
   it('starts over on a new video', async () => {
     const { session, show, state, fetchText } = setup();
     show('Line 7', 22_100);

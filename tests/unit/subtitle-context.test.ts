@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OBSERVED_START_LEAD_MS, describeLine, findCue, trackMatchesLine } from '@/lib/subtitles/context';
+import { OBSERVED_START_LEAD_MS, STORY_SEND_LIMIT, describeLine, findCue, storyBefore, trackMatchesLine } from '@/lib/subtitles/context';
 import type { Cue } from '@/lib/subtitles/cue';
 import { createLineHistory } from '@/lib/subtitles/history';
 import { cuesAsTimedLines, historyAsTimedLines, nextLineStart, previousLineStart } from '@/lib/subtitles/navigation';
@@ -45,13 +45,13 @@ describe('line history', () => {
     expect(h.current()?.text).toBe('Hello');
   });
 
-  it('keeps the last 50 lines and lists earlier lines oldest first', () => {
+  it('keeps the last 600 lines and lists earlier lines oldest first', () => {
     const h = createLineHistory();
-    for (let i = 0; i < 60; i++) h.observe(`L${i}`, i * 1000);
-    expect(h.all()).toHaveLength(50);
+    for (let i = 0; i < 610; i++) h.observe(`L${i}`, i * 1000);
+    expect(h.all()).toHaveLength(600);
     expect(h.all()[0]!.text).toBe('L10');
     const last = h.current()!;
-    expect(h.before(last, 3).map((l) => l.text)).toEqual(['L56', 'L57', 'L58']);
+    expect(h.before(last, 3).map((l) => l.text)).toEqual(['L606', 'L607', 'L608']);
   });
 });
 
@@ -146,6 +146,65 @@ describe('describeLine', () => {
   it('a line whose time is unknown has no timing', () => {
     const h = observeAll([['Hello', null as unknown as number]]);
     expect(describeLine(h.current()!, null, h).timing).toBeNull();
+  });
+});
+
+describe('storyBefore (v2 spec §5.2: the story so far)', () => {
+  it('story so far stops before the context window (file and history)', () => {
+    // From the file: Line 10 is the target; Line 4–9 are its context before, Line 11–14 after.
+    const fromFile = observeAll([['Line 10', 31_100]]);
+    const target = fromFile.current()!;
+    const story = storyBefore(target, CUES, fromFile);
+    expect(story).toEqual([0, 1, 2, 3].map((i) => ({ startMs: 1000 + i * 3000, text: `Line ${i}` })));
+    const { context } = describeLine(target, CUES, fromFile);
+    const texts = story.map((l) => l.text);
+    for (const text of [...context.before, 'Line 10', ...context.after]) expect(texts).not.toContain(text);
+
+    // From history after rewinding: lines seen later in the episode never count.
+    const h = createLineHistory();
+    for (let i = 0; i < 12; i++) {
+      h.observe(`Seen ${i}`, 10_000 + i * 2000);
+      h.observe('', 11_000 + i * 2000);
+    }
+    h.observe('Seen 3', 16_050); // rewound to Seen 3
+    const rewound = h.current()!;
+    expect(describeLine(rewound, null, h).context.before).toEqual(['Seen 0', 'Seen 1', 'Seen 2']);
+    expect(storyBefore(rewound, null, h)).toEqual([]);
+  });
+
+  it('from history: the lines before the 6 context lines, in episode order, starting 300 ms early', () => {
+    const h = createLineHistory();
+    for (let i = 0; i < 9; i++) {
+      h.observe(`Seen ${i}`, 10_000 + i * 2000);
+      h.observe('', 11_000 + i * 2000);
+    }
+    const line = h.current()!; // Seen 8; its context before is Seen 2–7
+    expect(describeLine(line, null, h).context.before).toEqual(['Seen 2', 'Seen 3', 'Seen 4', 'Seen 5', 'Seen 6', 'Seen 7']);
+    expect(storyBefore(line, null, h)).toEqual([
+      { startMs: 10_000 - OBSERVED_START_LEAD_MS, text: 'Seen 0' },
+      { startMs: 12_000 - OBSERVED_START_LEAD_MS, text: 'Seen 1' },
+    ]);
+  });
+
+  it('keeps the newest `limit` lines (1000 by default), one line per cue; nothing near the start or for an untimed line', () => {
+    const fromFile = observeAll([['Line 10', 31_100]]);
+    expect(storyBefore(fromFile.current()!, CUES, fromFile, 2).map((l) => l.text)).toEqual(['Line 2', 'Line 3']);
+    const twoLine: Cue[] = CUES.map((c, i) => (i === 1 ? { ...c, text: 'Two\nlines' } : c));
+    expect(storyBefore(fromFile.current()!, twoLine, fromFile)[1]).toEqual({ startMs: 4000, text: 'Two lines' });
+
+    const early = observeAll([['Line 3', 10_100]]);
+    expect(storyBefore(early.current()!, CUES, early)).toEqual([]);
+
+    expect(STORY_SEND_LIMIT).toBe(1000);
+    const many: Cue[] = Array.from({ length: 1300 }, (_, i) => ({ startMs: i * 1000, endMs: i * 1000 + 900, text: `Cue ${i}` }));
+    const late = observeAll([['Cue 1250', 1_250_100]]);
+    const story = storyBefore(late.current()!, many, late);
+    expect(story).toHaveLength(1000);
+    expect(story[0]!.text).toBe('Cue 244');
+    expect(story.at(-1)!.text).toBe('Cue 1243');
+
+    const untimed = observeAll([['Hello', null as unknown as number]]);
+    expect(storyBefore(untimed.current()!, null, untimed)).toEqual([]);
   });
 });
 

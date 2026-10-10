@@ -32,6 +32,8 @@ export interface Settings {
   /** A code from src/lib/languages.ts. */
   explanationLanguage: string;
   cardSections: CardSections;
+  /** Send Claude the subtitle lines before the dialogue: the story so far (v2 spec §5.2, §8). */
+  sendStorySoFar: boolean;
 }
 
 export const SEEK_SECONDS_MIN = 1;
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pauseOnHover: true,
   explanationLanguage: 'en',
   cardSections: { meaning: true, keyExpressions: true, howToUse: true, followUp: true },
+  sendStorySoFar: true,
 };
 
 const SETTINGS_KEY = 'sync:settings';
@@ -135,6 +138,7 @@ export function normalizeSettings(raw: unknown, uiLanguage: string = browserUiLa
     pauseOnHover: typeof r.pauseOnHover === 'boolean' ? r.pauseOnHover : DEFAULT_SETTINGS.pauseOnHover,
     explanationLanguage: isExplanationLanguage(r.explanationLanguage) ? r.explanationLanguage : languageForUi(uiLanguage),
     cardSections: normalizeCardSections(r.cardSections),
+    sendStorySoFar: typeof r.sendStorySoFar === 'boolean' ? r.sendStorySoFar : DEFAULT_SETTINGS.sendStorySoFar,
   };
 }
 

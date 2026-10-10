@@ -149,6 +149,13 @@ describe('explanation and line settings', () => {
     const taken = normalizeSettings({ shortcuts: { rewind: key('KeyE') } }, 'en');
     expect(taken.shortcuts.explainLine).toBeNull();
   });
+
+  it('Send the story so far: on by default, kept when off, repaired when invalid', () => {
+    expect(DEFAULT_SETTINGS.sendStorySoFar).toBe(true);
+    expect(normalizeSettings(undefined, 'en').sendStorySoFar).toBe(true);
+    expect(normalizeSettings({ sendStorySoFar: false }, 'en').sendStorySoFar).toBe(false);
+    expect(normalizeSettings({ sendStorySoFar: 'no' }, 'en').sendStorySoFar).toBe(true);
+  });
 });
 
 describe('writing keeps fields from a newer LingoFlix (synced from another computer)', () => {

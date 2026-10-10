@@ -126,4 +126,13 @@ describe('explanation and line settings', () => {
     await waitFor(() => expect(screen.queryByLabelText('Rewind seconds')).toBeNull());
     expect(screen.getByLabelText('Forward seconds')).toBeTruthy();
   });
+
+  it('saves Send the story so far', async () => {
+    render(<SettingsTab send={fakeBackground().send} />);
+    const toggle = await screen.findByRole('switch', { name: 'Send the story so far' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(toggle.textContent).toContain('Better explanations; more tokens late in an episode.');
+    fireEvent.click(toggle);
+    await waitFor(async () => expect((await loadSettings()).sendStorySoFar).toBe(false));
+  });
 });

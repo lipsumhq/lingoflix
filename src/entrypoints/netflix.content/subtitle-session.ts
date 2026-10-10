@@ -1,6 +1,6 @@
 import type { BridgeClient } from '@/lib/bridge/client';
 import { parseSubtitleSource, type PlayerState } from '@/lib/bridge/protocol';
-import { describeLine, trackMatchesLine, type LineDetails } from '@/lib/subtitles/context';
+import { describeLine, storyBefore, trackMatchesLine, type LineDetails, type StoryLine } from '@/lib/subtitles/context';
 import type { Cue } from '@/lib/subtitles/cue';
 import { createLineHistory, type ObservedLine } from '@/lib/subtitles/history';
 import { cuesAsTimedLines, historyAsTimedLines, nextLineStart, previousLineStart } from '@/lib/subtitles/navigation';
@@ -22,6 +22,8 @@ export interface SubtitleSession {
   currentLine(): ObservedLine | null;
   /** Context and timing: from the subtitle file when it matches the screen, else from history (spec §8.2). */
   describe(line: ObservedLine): LineDetails;
+  /** The lines before the context window, for Claude's story so far (v2 spec §5.2). Never the context or later. */
+  storySoFar(line: ObservedLine): StoryLine[];
   /** Episode time of the previous/next line start (spec §5.1.1), or null when there is none. */
   lineTarget(direction: 'previous' | 'next'): number | null;
   /** Language of the subtitle file in use, or null when none is in use. */
@@ -116,6 +118,10 @@ export function createSubtitleSession(deps: SubtitleSessionDeps): SubtitleSessio
     describe(line) {
       syncVideo();
       return describeLine(line, usableCues(line), history);
+    },
+    storySoFar(line) {
+      syncVideo();
+      return storyBefore(line, usableCues(line), history);
     },
     lineTarget(direction) {
       syncVideo();

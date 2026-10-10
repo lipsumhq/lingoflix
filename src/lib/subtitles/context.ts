@@ -72,28 +72,35 @@ export function trackMatchesLine(cues: readonly Cue[], line: ObservedLine): bool
   return line.shownAtMs !== null && findCue(cues, line.normalized, line.shownAtMs) >= 0;
 }
 
+type TimedLine = ObservedLine & { shownAtMs: number };
+
 /**
- * Up to CONTEXT_LINES lines seen before `line` in episode order, not in the order they were seen: after
- * rewinding or Replay, lines seen again are new history entries. Repeats of the target line and rewatched
+ * Lines seen before episode time `at`, in episode order, not in the order they were seen: after rewinding or
+ * Replay, lines seen again are new history entries. Repeats of `line` itself, untimed lines, and rewatched
  * duplicates (same text within 500 ms) are left out.
  */
-function historyBefore(line: ObservedLine, history: Pick<LineHistory, 'before' | 'all'>): string[] {
-  const at = line.shownAtMs;
-  if (at === null) return history.before(line, CONTEXT_LINES).map((l) => l.text);
+function seenBefore(line: ObservedLine, at: number, history: Pick<LineHistory, 'all'>): TimedLine[] {
   const earlier = history
     .all()
-    .filter((l): l is ObservedLine & { shownAtMs: number } => l.shownAtMs !== null && l.shownAtMs < at)
+    .filter((l): l is TimedLine => l.shownAtMs !== null && l.shownAtMs < at)
     .filter((l) => l.normalized !== line.normalized)
     .sort((a, b) => a.shownAtMs - b.shownAtMs);
   const lastSeen = new Map<string, number>();
-  const merged: ObservedLine[] = [];
+  const merged: TimedLine[] = [];
   for (const l of earlier) {
     const previous = lastSeen.get(l.normalized);
     if (previous !== undefined && l.shownAtMs - previous <= REWATCHED_WITHIN_MS) continue;
     lastSeen.set(l.normalized, l.shownAtMs);
     merged.push(l);
   }
-  return merged.slice(-CONTEXT_LINES).map((l) => l.text);
+  return merged;
+}
+
+/** Up to CONTEXT_LINES lines seen before `line`, in episode order (see seenBefore). */
+function historyBefore(line: ObservedLine, history: Pick<LineHistory, 'before' | 'all'>): string[] {
+  const at = line.shownAtMs;
+  if (at === null) return history.before(line, CONTEXT_LINES).map((l) => l.text);
+  return seenBefore(line, at, history).slice(-CONTEXT_LINES).map((l) => l.text);
 }
 
 /** Context and timing for a line: from the subtitle file when it matches, else from the rolling history. */
@@ -127,4 +134,39 @@ export function describeLine(
     timing: at === null ? null : { startMs: Math.max(0, at - OBSERVED_START_LEAD_MS), endMs: line.hiddenAtMs },
     fromTrack: false,
   };
+}
+
+/** One line of the story so far: when it starts (episode ms) and its text on one line. */
+export interface StoryLine {
+  startMs: number;
+  text: string;
+}
+
+/** The content script sends at most this many story lines (v2 spec §5.2). */
+export const STORY_SEND_LIMIT = 1000;
+
+/**
+ * The story so far (v2 spec §5.2): the lines before `line`'s context window, oldest first, at most `limit`.
+ * From the subtitle file when it has the line, else from the lines seen (starting 300 ms before they
+ * appeared). Never the line itself, its CONTEXT_LINES lines before, or anything after it, so Claude never sees
+ * past the context (no spoilers).
+ */
+export function storyBefore(
+  line: ObservedLine,
+  cues: readonly Cue[] | null,
+  history: Pick<LineHistory, 'before' | 'all'>,
+  limit = STORY_SEND_LIMIT,
+): StoryLine[] {
+  const at = line.shownAtMs;
+  if (at === null || limit <= 0) return [];
+  const first = cues ? findCue(cues, line.normalized, at) : -1;
+  if (cues && first >= 0) {
+    const end = Math.max(0, first - CONTEXT_LINES);
+    return cues.slice(Math.max(0, end - limit), end).map((c) => ({ startMs: c.startMs, text: normalizeLine(c.text) }));
+  }
+  const seen = seenBefore(line, at, history);
+  const end = Math.max(0, seen.length - CONTEXT_LINES);
+  return seen
+    .slice(Math.max(0, end - limit), end)
+    .map((l) => ({ startMs: Math.max(0, l.shownAtMs - OBSERVED_START_LEAD_MS), text: l.normalized }));
 }
