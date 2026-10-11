@@ -28,19 +28,24 @@ computer, and turning reminders off deletes it.
 
 Not affiliated with or endorsed by Netflix.
 
+## Repository
+
+| Folder | What it is |
+|---|---|
+| [`lingoflix-extension/`](./lingoflix-extension) | The Chrome extension (WXT, React, TypeScript) |
+| `lingoflix-server/` | The website and API (Next.js), coming with the subscription |
+| [`docs/`](./docs) | Design specs and implementation plans |
+
 ## Development
 
 ```bash
-pnpm install
+pnpm install     # installs every package in the workspace
 pnpm test        # unit tests
 pnpm compile     # type-check
-pnpm build       # production build → .output/chrome-mv3
+pnpm build       # production builds (extension → lingoflix-extension/.output/chrome-mv3)
 ```
 
-To try it on Netflix, load the build into your normal Chrome profile (WXT's dev browser
-has no Netflix login or DRM): `chrome://extensions` → Developer mode → **Load unpacked** →
-select `.output/chrome-mv3`. After rebuilding, press the reload icon on the extension card
-and refresh the Netflix tab.
+See [`lingoflix-extension/README.md`](./lingoflix-extension/README.md) for trying the extension on Netflix.
 
 ## Support
 

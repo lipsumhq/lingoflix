@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  lingoflix-extension:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: 0.128.0
