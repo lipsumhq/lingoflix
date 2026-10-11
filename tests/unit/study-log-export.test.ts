@@ -159,6 +159,22 @@ describe('export escaping (Review Focus 5)', () => {
     const dash = item({ type: 'line', text: '- What?', line: '- What?', meaning: '=SUM(A1)' });
     expect(toCsv([dash]).split('\r\n')[1]!.split(',').slice(1, 4)).toEqual(['"\'- What?"', '"\'=SUM(A1)"', '"\'- What?"']);
   });
+
+  it('keeps combining marks in the show tag (Thai, Hindi) and composes decomposed accents', () => {
+    const tagOf = (seriesTitle: string) => toAnki([item({ seriesTitle })]).split('\n')[ANKI_HEADERS.length]!.split('\t')[2];
+    expect(tagOf('สควิดเกม')).toBe('lingoflix idiom สควิดเกม');
+    expect(tagOf('हिन्दी मीडियम')).toBe('lingoflix idiom हिन्दी_मीडियम');
+    expect(tagOf('Pokémon: The Movie')).toBe('lingoflix idiom pokémon_the_movie');
+  });
+
+  it('keeps a note whose front starts with "#" from reading as an Anki comment', () => {
+    const notes = toAnki([item({ type: 'word', text: '#1', line: "We're #1!" }), item({ type: 'line', text: "# I'm walking on sunshine #", line: "# I'm walking on sunshine #" })])
+      .split('\n')
+      .slice(ANKI_HEADERS.length, -1);
+    expect(notes).toHaveLength(2);
+    expect(notes.map((note) => note.startsWith('#'))).toEqual([false, false]);
+    expect(notes.map((note) => note.split('\t')[0])).toEqual(['&#35;1', "&#35; I'm walking on sunshine #"]);
+  });
 });
 
 describe('toBackup', () => {

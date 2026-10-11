@@ -46,12 +46,20 @@ const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&
 /** One Anki field: a raw tab would start a new field and a raw line break a new note. */
 const ankiField = (html: string) => html.replace(/\t/g, ' ').replace(/\r\n|\r|\n/g, '<br>');
 
-/** Lowercase, with every run of characters that aren't letters or digits (in any script) turned into "_". */
+/**
+ * Lowercase NFC, with every run of characters that aren't letters, combining marks or digits (in any script) turned
+ * into "_". Marks count as part of a word: Thai vowels, Devanagari matras and viramas are marks, and a decomposed
+ * accent ("e" + U+0301) composes into one letter first.
+ */
 const tagSlug = (title: string) =>
   title
+    .normalize('NFC')
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, '_')
     .replace(/^_+|_+$/g, '');
+
+/** Anki's importer skips a line that starts with "#" (a header or comment); `&#35;` shows as "#" with HTML on. */
+const ankiFront = (html: string) => html.replace(/^#/, '&#35;');
 
 /**
  * The line as HTML with every occurrence of `text` in bold: case-insensitive, any whitespace between words,
@@ -83,7 +91,7 @@ export function toAnki(items: readonly SavedItem[]): string {
     const line = item.type === 'line' ? escapeHtml(item.line) : highlightHtml(item.line, item.text);
     const back = `${meaning}${line}<br><small>${escapeHtml(sourceLabel(item))}</small>`;
     const tags = ['lingoflix', item.type, tagSlug(item.seriesTitle)].filter(Boolean).join(' ');
-    return [escapeHtml(item.text), back, tags].map(ankiField).join('\t');
+    return [ankiFront(escapeHtml(item.text)), back, tags].map(ankiField).join('\t');
   });
   return `${[...ANKI_HEADERS, ...notes].join('\n')}\n`;
 }
