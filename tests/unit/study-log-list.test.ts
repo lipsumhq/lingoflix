@@ -97,6 +97,32 @@ describe('filterItems and newestFirst', () => {
     expect(ids(filterItems(items, { type: 'line', query: 'go' }))).toEqual(['3']);
   });
 
+  it('finds a two-line whole-line item with a query across the line break', () => {
+    const wrapped = [item({ id: 'w', type: 'line', text: "I'm gonna call it\na night.", meaning: '' })];
+    expect(ids(filterItems(wrapped, { type: 'all', query: 'call it a night' }))).toEqual(['w']);
+    expect(ids(filterItems(wrapped, { type: 'line', query: 'Gonna Call It A Night' }))).toEqual(['w']);
+  });
+
+  it('matches a query with doubled inner spaces, and a meaning that spans lines', () => {
+    expect(ids(filterItems(items, { type: 'all', query: 'call  it   a night' }))).toEqual(['1']);
+    const wrapped = [item({ id: 'm', text: 'bail', meaning: 'to leave\nsuddenly' })];
+    expect(ids(filterItems(wrapped, { type: 'all', query: 'leave suddenly' }))).toEqual(['m']);
+  });
+
+  it('matches Korean and Japanese queries', () => {
+    const cjk = [
+      item({ id: 'ko', type: 'phrase', text: 'call it a night', meaning: '오늘은 그만하다' }),
+      item({ id: 'ja', type: 'phrase', text: 'call it a night', meaning: '今日はここまでにする' }),
+    ];
+    expect(ids(filterItems(cjk, { type: 'all', query: '그만하다' }))).toEqual(['ko']);
+    expect(ids(filterItems(cjk, { type: 'all', query: 'ここまで' }))).toEqual(['ja']);
+  });
+
+  it('an empty or whitespace-only query matches everything', () => {
+    expect(ids(filterItems(items, { type: 'all', query: '' }))).toEqual(['1', '2', '3']);
+    expect(ids(filterItems(items, { type: 'all', query: ' \n\t ' }))).toEqual(['1', '2', '3']);
+  });
+
   it('newestFirst sorts by savedAt without changing the input', () => {
     const list = [
       item({ id: 'old', savedAt: '2026-10-01T00:00:00Z' }),
