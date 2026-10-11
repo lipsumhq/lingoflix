@@ -1,7 +1,7 @@
 import { ITEM_TYPES, type ItemType, type SaveSuggestion } from '@/lib/study-log/types';
 import { normalizeLine } from '@/lib/subtitles/cue';
 
-// Bundled into the Netflix content script (the card uses cardRows): never import the Anthropic SDK here.
+// Bundled into the Netflix content script (the card uses cardRows): never import an SDK here.
 
 export const SUGGEST_SAVES_TOOL_NAME = 'suggest_saves';
 export const MAX_SUGGESTIONS = 6;

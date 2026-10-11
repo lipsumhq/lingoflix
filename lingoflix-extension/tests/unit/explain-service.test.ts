@@ -1,4 +1,5 @@
 import { APIError } from '@anthropic-ai/sdk';
+import { RateLimitError as OpenAIRateLimitError } from 'openai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { AiClient, StreamParams, SystemBlock, ToolCall } from '@/lib/ai/client';
@@ -423,12 +424,19 @@ describe('explain service: failures', () => {
   });
 
   it("names the key's provider in errors, and its company when out of credit", async () => {
-    const outOfCredit = APIError.generate(402, { error: { type: 'billing_error', message: 'No credit' } }, 'x', new Headers());
-    for (const [apiKey, expected] of [
-      ['sk-ant-test-key-0000', { type: 'error', code: 'no-credit', message: 'Your Anthropic account is out of credit', provider: 'claude' }],
-      ['sk-proj-test-key-0000', { type: 'error', code: 'no-credit', message: 'Your OpenAI account is out of credit', provider: 'openai' }],
+    for (const [apiKey, error, expected] of [
+      [
+        'sk-ant-test-key-0000',
+        APIError.generate(402, { error: { type: 'billing_error', message: 'No credit' } }, 'x', new Headers()),
+        { type: 'error', code: 'no-credit', message: 'Your Anthropic account is out of credit', provider: 'claude' },
+      ],
+      [
+        'sk-proj-test-key-0000',
+        new OpenAIRateLimitError(429, { type: 'insufficient_quota', code: 'insufficient_quota', message: 'No quota' }, 'x', new Headers()),
+        { type: 'error', code: 'no-credit', message: 'Your OpenAI account is out of credit', provider: 'openai' },
+      ],
     ] as const) {
-      const { client } = fakeClient({ error: outOfCredit });
+      const { client } = fakeClient({ error });
       const { port, sent, send } = fakePort();
       serveExplainPort(port, deps(client, { getApiKey: async () => apiKey }));
       send({ type: 'start', request: REQUEST });

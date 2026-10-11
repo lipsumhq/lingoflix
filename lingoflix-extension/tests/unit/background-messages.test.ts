@@ -1,4 +1,5 @@
 import { APIConnectionError, APIError } from '@anthropic-ai/sdk';
+import { APIConnectionError as OpenAIConnectionError, APIError as OpenAIError } from 'openai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { getApiKey, maskApiKey, removeApiKey, setApiKey } from '@/lib/api-key';
@@ -151,11 +152,11 @@ describe('API key requests', () => {
     await setApiKey(OPENAI_KEY);
     expect(await handlerWith().handle({ type: 'api-key:test' })).toEqual({ result: 'valid', message: 'Your key works.' });
     const rejected = handlerWith(async () => {
-      throw APIError.generate(401, { error: { type: 'authentication_error', message: 'invalid' } }, 'x', new Headers());
+      throw OpenAIError.generate(401, { error: { type: 'invalid_request_error', code: 'invalid_api_key', message: 'Incorrect API key.' } }, 'x', new Headers());
     });
     expect(await rejected.handle({ type: 'api-key:test' })).toEqual({ result: 'rejected', message: 'OpenAI rejected this key.' });
     const offline = handlerWith(async () => {
-      throw new APIConnectionError({ message: 'fetch failed' });
+      throw new OpenAIConnectionError({ message: 'fetch failed' });
     });
     expect(await offline.handle({ type: 'api-key:test' })).toEqual({
       result: 'network',

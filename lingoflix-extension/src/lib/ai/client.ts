@@ -1,4 +1,6 @@
 import { createAnthropicClient } from './anthropic';
+import { createOpenAIClient } from './openai';
+import { NOT_A_KEY, providerOf } from './provider';
 
 /** One part of the system prompt; `cache` puts a prompt-cache breakpoint after it (v2 spec §5.1). */
 export interface SystemBlock {
@@ -50,7 +52,10 @@ export interface AiClient {
   checkKey(): Promise<void>;
 }
 
-/** The client for an API key. */
+/** The client for an API key's provider (free-own-key spec §3.1). */
 export function createClient(apiKey: string): AiClient {
-  return createAnthropicClient(apiKey);
+  const provider = providerOf(apiKey);
+  if (provider === 'claude') return createAnthropicClient(apiKey);
+  if (provider === 'openai') return createOpenAIClient(apiKey);
+  throw new Error(NOT_A_KEY);
 }
