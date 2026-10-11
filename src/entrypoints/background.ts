@@ -7,7 +7,6 @@ import { EXPLAIN_PORT } from '@/lib/claude/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
 import { notificationPermission } from '@/lib/reminders/permission';
 import { installReminders } from '@/lib/reminders/service';
-import { recordWatched } from '@/lib/reminders/store';
 import { migrateIfNeeded, saveItem, savedKeysFor, unsaveItem } from '@/lib/study-log/items';
 import { appendFollowUp, findExplanation, getExplanation, readStudyLog, saveExplanation } from '@/lib/study-log/store';
 
@@ -42,7 +41,7 @@ export default defineBackground(() => {
     openOptions: async (hash) => {
       await browser.tabs.create({ url: `${browser.runtime.getURL('/options.html')}${hash}` });
     },
-    recordWatched: (show) => recordWatched(show),
+    recordWatched: (show) => reminders.recordWatched(show),
     testReminder: () => reminders.test(),
   });
 

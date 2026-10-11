@@ -1,7 +1,7 @@
 import { REMINDER_ID, reminderNotification, reminderUrl } from './notification';
 import type { NotificationPermission } from './permission';
 import { nextReminderTime, shouldNotify } from './schedule';
-import { clearActivity, loadActivity, loadReminders, watchReminders } from './store';
+import { clearActivity, loadActivity, loadReminders, recordWatched, watchReminders } from './store';
 
 /** Reminders spec §6: the one alarm, always set for the next reminder (or cleared). */
 export const REMINDER_ALARM = 'study-reminder';
@@ -45,6 +45,11 @@ export interface ReminderDeps {
 export interface ReminderService {
   /** Send a test (reminders spec §3): shows the reminder now, ignoring the skip rules. False if it couldn't. */
   test(): Promise<boolean>;
+  /**
+   * `activity:watched` (reminders spec §5): records the watch only while the switch shows on, that is, reminders
+   * are on and the permission is granted.
+   */
+  recordWatched(show: unknown): Promise<void>;
 }
 
 /**
@@ -132,5 +137,10 @@ export function installReminders(deps: ReminderDeps): ReminderService {
   });
   listenForClicks();
 
-  return { test: show };
+  return {
+    test: show,
+    async recordWatched(watched) {
+      if (await permission.has()) await recordWatched(watched, now());
+    },
+  };
 }

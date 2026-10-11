@@ -4,7 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { REMINDER_ID } from '@/lib/reminders/notification';
 import type { NotificationPermission } from '@/lib/reminders/permission';
 import { REMINDER_ALARM, installReminders } from '@/lib/reminders/service';
-import { recordWatched, updateReminders, type Reminders } from '@/lib/reminders/store';
+import { loadActivity, recordWatched, updateReminders, type Reminders } from '@/lib/reminders/store';
 
 beforeEach(() => fakeBrowser.reset());
 
@@ -155,6 +155,21 @@ describe('the watch record', () => {
     expect(await storage.getItem('local:activity')).not.toBeNull();
     change(false);
     await vi.waitFor(async () => expect(await storage.getItem('local:activity')).toBeNull());
+  });
+
+  it('is not written while the switch shows off: reminders on but the permission missing', async () => {
+    await turnOn();
+    const { service } = setup({ granted: false });
+    await service.recordWatched(SHOW);
+    await settle();
+    expect(await storage.getItem('local:activity')).toBeNull();
+  });
+
+  it('is written while reminders are on and the permission is granted', async () => {
+    await turnOn();
+    const { service } = setup();
+    await service.recordWatched(SHOW);
+    expect(await loadActivity()).toEqual({ lastWatchedOn: '2026-10-14', show: SHOW });
   });
 });
 
