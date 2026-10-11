@@ -7,6 +7,7 @@ import { EXPLAIN_PORT } from '@/lib/ai/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
 import { notificationPermission } from '@/lib/reminders/permission';
 import { installReminders } from '@/lib/reminders/service';
+import { installSitePages } from '@/lib/site-pages';
 import { migrateIfNeeded, saveItem, savedKeysFor, unsaveItem } from '@/lib/study-log/items';
 import { appendFollowUp, findExplanation, getExplanation, readStudyLog, saveExplanation } from '@/lib/study-log/store';
 
@@ -18,6 +19,9 @@ export default defineBackground(() => {
     permission: notificationPermission,
     now: Date.now,
   });
+
+  // Free-own-key spec §4.7: the welcome page on first install, and the goodbye page as the uninstall page.
+  installSitePages(browser);
 
   // v2 spec §3.3: lines explained before v2 become saved whole-line items, once: on install and update, and
   // whenever the worker starts before it has run (a run that failed or was cut short). Both go through

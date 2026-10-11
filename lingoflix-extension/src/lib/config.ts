@@ -3,6 +3,9 @@ export const DONATION_LINKS = [
   { id: 'github-sponsors', label: 'GitHub Sponsors', shortLabel: 'Sponsor', url: 'https://github.com/sponsors/jaycho1214' },
 ] as const;
 
+/** LingoFlix's site: the install and uninstall pages (free-own-key spec §4.7). */
+export const SITE_URL = 'https://lingoflix.lipsum.fun';
+
 export const DONATION_TITLE = 'Enjoying LingoFlix?';
 export const DONATION_COPY = "It's free forever. A coffee keeps it going.";
 
