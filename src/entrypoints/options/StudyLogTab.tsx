@@ -12,7 +12,7 @@ import { episodeLabel, savedItemsLabel, seasonLabel } from '@/lib/study-log/form
 import { groupStudyLog, type StudyLogTree as Tree } from '@/lib/study-log/group';
 import { IMPORT_ERROR_COPY, IMPORT_FAILED_COPY, importBackup, importSummaryText } from '@/lib/study-log/import';
 import { deleteItems, listItems, migrateIfNeeded } from '@/lib/study-log/items';
-import { listExplanations, resetStudyLog, watchStudyLog } from '@/lib/study-log/store';
+import { listExplanations, readStudyLog, resetStudyLog, watchStudyLog } from '@/lib/study-log/store';
 import type { SavedItem } from '@/lib/study-log/types';
 import { StudyLogDetail } from './StudyLogDetail';
 import { StudyLogExportMenu } from './StudyLogExportMenu';
@@ -127,7 +127,7 @@ export function StudyLogTab({
   useEffect(() => {
     let active = true;
     const load = () =>
-      void Promise.all([listItems(), listExplanations()]).then(([items, explanations]) => {
+      void readStudyLog().then(({ items, explanations }) => {
         if (active) setData({ items, historyCount: explanations.length });
       });
     // Explanations from before v2 become saved lines first (v2 spec §3.3). migrateIfNeeded reads only the marker

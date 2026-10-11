@@ -241,6 +241,19 @@ describe('Study Log tab', () => {
     expect(await listItems()).toHaveLength(1);
   });
 
+  it('reads storage once per load (on opening and on each change)', async () => {
+    await seed();
+    const get = vi.spyOn(fakeBrowser.storage.local, 'get');
+    render(<StudyLogTab />);
+    await rowTexts();
+    await waitFor(() => expect(get.mock.calls.filter(([keys]) => keys === null)).toHaveLength(1));
+    get.mockClear();
+    await save({ phrase: 'Fresh line' }, { type: 'line', text: 'Fresh line', meaning: '' }, '2026-10-10T11:00:00Z');
+    await waitFor(async () => expect((await rowTexts())[0]).toBe('Fresh line'));
+    // Two changes (the explanation, then the item), so two reloads; saving reads only single keys.
+    expect(get.mock.calls.filter(([keys]) => keys === null)).toHaveLength(2);
+  });
+
   it('shows an item saved from a Netflix tab without reloading', async () => {
     render(<StudyLogTab />);
     await screen.findByText('Nothing saved yet');

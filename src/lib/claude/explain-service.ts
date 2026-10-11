@@ -120,6 +120,15 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
     });
   });
 
+  /** v2 spec §5.2: the learning history block. When it can't be read, the request goes out without it. */
+  async function historyFor(line: string): Promise<string | null> {
+    try {
+      return learningHistoryBlock(await deps.loadHistory(), line);
+    } catch {
+      return null;
+    }
+  }
+
   async function run(raw: unknown): Promise<void> {
     const message = parseClientMessage(raw);
     if (!message) return fail('api', UNREADABLE);
@@ -131,7 +140,7 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
     let finish: (result: StreamResult) => Promise<Explanation | null>;
     if (message.type === 'start') {
       const { request } = message;
-      const history = learningHistoryBlock(await deps.loadHistory(), request.phrase);
+      const history = await historyFor(request.phrase);
       const instructions = buildSystemPrompt(request.language, request.sections);
       const { system, recent } = contextFor(instructions, request.storySoFar, request.videoTimeMs, history);
       params = {
@@ -146,7 +155,7 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
     } else {
       const explanation = await deps.getExplanation(message.explanationId);
       if (!explanation) return fail('api', EXPLANATION_GONE);
-      const history = learningHistoryBlock(await deps.loadHistory(), explanation.phrase);
+      const history = await historyFor(explanation.phrase);
       const instructions = buildSystemPrompt(explanation.explanationLanguage, message.sections, true);
       const { system, recent } = contextFor(instructions, message.storySoFar, explanation.videoTimeMs, history);
       params = {

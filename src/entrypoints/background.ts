@@ -5,8 +5,8 @@ import { createSdkClient } from '@/lib/claude/client';
 import { serveExplainPort, type ExplainPort } from '@/lib/claude/explain-service';
 import { EXPLAIN_PORT } from '@/lib/claude/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
-import { listItems, migrateIfNeeded, saveItem, savedKeysFor, unsaveItem } from '@/lib/study-log/items';
-import { appendFollowUp, findExplanation, getExplanation, listExplanations, saveExplanation } from '@/lib/study-log/store';
+import { migrateIfNeeded, saveItem, savedKeysFor, unsaveItem } from '@/lib/study-log/items';
+import { appendFollowUp, findExplanation, getExplanation, readStudyLog, saveExplanation } from '@/lib/study-log/store';
 
 export default defineBackground(() => {
   // v2 spec §3.3: lines explained before v2 become saved whole-line items, once: on install and update, and
@@ -49,7 +49,7 @@ export default defineBackground(() => {
       saveExplanation: (fields) => saveExplanation(fields),
       getExplanation,
       appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
-      loadHistory: async () => ({ items: await listItems(), explanations: await listExplanations() }),
+      loadHistory: readStudyLog,
       savedKeysFor,
     });
   });

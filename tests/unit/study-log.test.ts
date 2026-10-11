@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { episodeCode, episodeLabel, formatTimestamp, seasonLabel, whereLabel } from '@/lib/study-log/format';
 import {
@@ -6,9 +6,11 @@ import {
   findExplanation,
   getExplanation,
   listExplanations,
+  readStudyLog,
   resetStudyLog,
   saveExplanation,
 } from '@/lib/study-log/store';
+import { saveItem } from '@/lib/study-log/items';
 import { isSaveSuggestion, toExplanation, type NewExplanation } from '@/lib/study-log/types';
 
 beforeEach(() => fakeBrowser.reset());
@@ -86,6 +88,25 @@ describe('explanation store', () => {
     await fakeBrowser.storage.local.set({ 'log:bad': { id: 'bad' }, 'log:worse': 'text' });
     await saveExplanation(line(), undefined, ids());
     expect((await listExplanations()).map((e) => e.id)).toEqual(['id-1']);
+  });
+
+  it('readStudyLog returns the saved items and the explanations from one read of storage, skipping invalid records', async () => {
+    const explanation = await saveExplanation(line(), undefined, ids());
+    const item = await saveItem(explanation, { type: 'idiom', text: 'call it a night', meaning: 'stop' }, new Date(), () => 'item-1');
+    await fakeBrowser.storage.local.set({
+      'log:bad': { id: 'bad' },
+      'item:bad': { id: 'bad', type: 'sentence' },
+      'item:worse': 'text',
+      apiKey: 'sk-ant-secret',
+    });
+    const get = vi.spyOn(fakeBrowser.storage.local, 'get');
+    const log = await readStudyLog();
+    expect(get.mock.calls).toEqual([[null]]);
+    expect(log).toEqual({ items: [item], explanations: [explanation] });
+  });
+
+  it('readStudyLog of an empty Study Log is two empty lists', async () => {
+    expect(await readStudyLog()).toEqual({ items: [], explanations: [] });
   });
 });
 

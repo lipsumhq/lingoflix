@@ -1,7 +1,7 @@
 import { browser } from '#imports';
 import { normalizeLine } from '@/lib/subtitles/cue';
 import { EXPLANATION_INDEX_PREFIX, EXPLANATION_PREFIX, ITEM_INDEX_PREFIX, ITEM_PREFIX } from './keys';
-import { toExplanation, type Explanation, type FollowUp, type NewExplanation } from './types';
+import { isSavedItem, toExplanation, type Explanation, type FollowUp, type NewExplanation, type SavedItem } from './types';
 
 export { EXPLANATION_INDEX_PREFIX, EXPLANATION_PREFIX } from './keys';
 
@@ -34,6 +34,25 @@ export async function listExplanations(): Promise<Explanation[]> {
     .filter(([key]) => key.startsWith(EXPLANATION_PREFIX))
     .map(([, value]) => toExplanation(value))
     .filter(isExplanation);
+}
+
+/**
+ * The saved items and the explanations from one read of storage, for callers that need both (the learning
+ * history, the Study Log tab). Invalid records are skipped, as in `listItems` and `listExplanations`.
+ */
+export async function readStudyLog(): Promise<{ items: SavedItem[]; explanations: Explanation[] }> {
+  const all = await browser.storage.local.get(null);
+  const items: SavedItem[] = [];
+  const explanations: Explanation[] = [];
+  for (const [key, value] of Object.entries(all)) {
+    if (key.startsWith(ITEM_PREFIX)) {
+      if (isSavedItem(value)) items.push(value);
+    } else if (key.startsWith(EXPLANATION_PREFIX)) {
+      const explanation = toExplanation(value);
+      if (explanation) explanations.push(explanation);
+    }
+  }
+  return { items, explanations };
 }
 
 /**

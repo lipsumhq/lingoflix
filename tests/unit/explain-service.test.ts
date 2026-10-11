@@ -263,6 +263,29 @@ describe('explain service: explanations', () => {
     expect(await listItems()).toHaveLength(1);
   });
 
+  it('a failure reading the learning history still sends the request, without a history block', async () => {
+    const { client, calls } = fakeClient({ deltas: ['ok'] });
+    const { port, sent, send } = fakePort();
+    const loadHistory = vi.fn(async () => Promise.reject(new Error('storage')));
+    serveExplainPort(port, deps(client, { loadHistory }));
+    send({ type: 'start', request: { ...REQUEST, storySoFar: [{ startMs: 1_700_000, text: 'Old line' }] } });
+    await vi.waitFor(() => expect(sent.at(-1)?.type).toBe('done'));
+    expect(loadHistory).toHaveBeenCalledOnce();
+    expect(sent.slice(0, -1)).toEqual([{ type: 'delta', text: 'ok' }]);
+    const system = systemOf(calls[0]!);
+    expect(system).toHaveLength(2);
+    expect(system[1]).toEqual({ text: expect.stringContaining('Old line'), cache: true });
+    expect(system[2]).toBeUndefined();
+    expect(doneOf(sent).explanation.response).toBe('ok');
+
+    const saved = await saveExplanation(STORED);
+    const followUp = fakePort();
+    serveExplainPort(followUp.port, deps(client, { loadHistory }));
+    followUp.send({ type: 'follow-up', explanationId: saved.id, question: 'Why?', sections: DEFAULT_SETTINGS.cardSections, storySoFar: [] });
+    await vi.waitFor(() => expect(followUp.sent.at(-1)?.type).toBe('done'));
+    expect(systemOf(calls[1]!)).toEqual([{ text: expect.stringContaining('follow-up question'), cache: false }]);
+  });
+
   it('a failure reading saved keys still finishes, with none', async () => {
     const { client } = fakeClient({ deltas: ['ok'] });
     const { port, sent, send } = fakePort();
