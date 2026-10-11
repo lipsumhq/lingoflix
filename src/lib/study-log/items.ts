@@ -149,16 +149,27 @@ export async function migrateStudyLogV2(newId: () => string = () => crypto.rando
 
 let conversion: Promise<number> = Promise.resolve(0);
 
+/** The Web Lock the worker and the options page both take to convert (same origin, so they share it). */
+export const MIGRATION_LOCK = 'lingoflix:study-log-v2';
+
+const convertUnlessMarked = async (): Promise<number> =>
+  (await browser.storage.local.get(MIGRATION_KEY))[MIGRATION_KEY] === true ? 0 : migrateStudyLogV2();
+
 /**
- * The background's conversion, run when the worker starts and on install and update: `migrateStudyLogV2` unless
- * the marker says it has run, reading only the marker then. Calls run one at a time, so the worker starting and
- * `runtime.onInstalled` never convert together (two runs that both read storage before either writes would save
- * each line twice). Never rejects: a failure is logged as a warning and resolves 0, and the next call (or the
- * options page) tries again.
+ * The conversion as the background (when the worker starts, and on install and update) and the Study Log tab run
+ * it: `migrateStudyLogV2` unless the marker says it has run, reading only the marker then. Two runs that both read
+ * storage before either writes would save each line twice, so calls run one at a time: queued within this context
+ * (the worker starting and `runtime.onInstalled`, or StrictMode's double effect), and across contexts (a Study Log
+ * tab restored at browser start while the worker converts) the marker check and the conversion run inside the
+ * `MIGRATION_LOCK` Web Lock when `navigator.locks` exists. Never rejects: a failure is logged as a warning and
+ * resolves 0, and the next call (or the options page) tries again.
  */
 export function migrateIfNeeded(): Promise<number> {
   conversion = conversion
-    .then(async () => ((await browser.storage.local.get(MIGRATION_KEY))[MIGRATION_KEY] === true ? 0 : migrateStudyLogV2()))
+    .then(() => {
+      const locks = globalThis.navigator?.locks;
+      return locks ? locks.request(MIGRATION_LOCK, convertUnlessMarked) : convertUnlessMarked();
+    })
     .catch((err: unknown) => {
       console.warn('LingoFlix: Study Log v2 conversion failed', err);
       return 0;

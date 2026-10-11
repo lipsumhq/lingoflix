@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { cardRows } from '@/lib/claude/suggestions';
 import {
@@ -300,6 +300,80 @@ describe('migrateStudyLogV2 (v2 spec §3.3)', () => {
       expect(await listItems()).toEqual([]);
       expect(await migrateIfNeeded()).toBe(1);
       expect(await listItems()).toHaveLength(1);
+    });
+  });
+
+  describe('migrateIfNeeded across contexts (the worker and a Study Log tab share a Web Lock)', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    /** A stand-in for `navigator.locks`: records each requested name and runs the callbacks one at a time. */
+    const fakeLocks = () => {
+      const names: string[] = [];
+      let held = false;
+      let queue: Promise<unknown> = Promise.resolve();
+      const request = (name: string, callback: (lock: unknown) => unknown) => {
+        names.push(name);
+        const run = queue.then(async () => {
+          held = true;
+          try {
+            return await callback({ name, mode: 'exclusive' });
+          } finally {
+            held = false;
+          }
+        });
+        queue = run.catch(() => {});
+        return run;
+      };
+      return { locks: { request }, names, isHeld: () => held };
+    };
+
+    it("requests the 'lingoflix:study-log-v2' lock and checks the marker and converts inside it", async () => {
+      const fake = fakeLocks();
+      vi.stubGlobal('navigator', { locks: fake.locks });
+      await fakeBrowser.storage.local.set({ 'log:old-1': preV2('old-1') });
+      const heldOnGet: boolean[] = [];
+      const heldOnSet: boolean[] = [];
+      const get = fakeBrowser.storage.local.get.bind(fakeBrowser.storage.local);
+      const set = fakeBrowser.storage.local.set.bind(fakeBrowser.storage.local);
+      vi.spyOn(fakeBrowser.storage.local, 'get').mockImplementation(((keys: never) => {
+        heldOnGet.push(fake.isHeld());
+        return get(keys);
+      }) as typeof fakeBrowser.storage.local.get);
+      vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation((items) => {
+        heldOnSet.push(fake.isHeld());
+        return set(items);
+      });
+      expect(await migrateIfNeeded()).toBe(1);
+      expect(fake.names).toEqual(['lingoflix:study-log-v2']);
+      expect(heldOnGet).toEqual([true, true]); // the marker, then everything
+      expect(heldOnSet).toEqual([true]);
+      vi.restoreAllMocks();
+      expect(await listItems()).toEqual([expect.objectContaining({ type: 'line', explanationId: 'old-1' })]);
+    });
+
+    it('two contexts (separate module queues) converting together save each line once', async () => {
+      const fake = fakeLocks();
+      vi.stubGlobal('navigator', { locks: fake.locks });
+      await fakeBrowser.storage.local.set({ 'log:old-1': preV2('old-1'), 'log:old-2': preV2('old-2', { phrase: 'Night.' }) });
+      vi.resetModules();
+      const worker = await import('@/lib/study-log/items');
+      vi.resetModules();
+      const page = await import('@/lib/study-log/items');
+      expect(page.migrateIfNeeded).not.toBe(worker.migrateIfNeeded);
+      expect(await Promise.all([worker.migrateIfNeeded(), page.migrateIfNeeded()])).toEqual([2, 0]);
+      expect(fake.names).toEqual(['lingoflix:study-log-v2', 'lingoflix:study-log-v2']);
+      expect(await listItems()).toHaveLength(2);
+    });
+
+    it('without navigator.locks, converts as before: one at a time within the context', async () => {
+      vi.stubGlobal('navigator', {});
+      await fakeBrowser.storage.local.set({ 'log:old-1': preV2('old-1') });
+      expect(await Promise.all([migrateIfNeeded(), migrateIfNeeded()])).toEqual([1, 0]);
+      expect(await listItems()).toHaveLength(1);
+      expect(await stored(MIGRATION_KEY)).toBe(true);
+      const get = vi.spyOn(fakeBrowser.storage.local, 'get');
+      expect(await migrateIfNeeded()).toBe(0);
+      expect(get.mock.calls).toEqual([[MIGRATION_KEY]]);
     });
   });
 });
