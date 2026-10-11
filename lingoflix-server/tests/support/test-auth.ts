@@ -15,7 +15,11 @@ export interface TestAuth {
   close(): Promise<void>;
 }
 
-/** Better Auth on a fresh in-memory Postgres with every migration applied. */
+/**
+ * Better Auth on a fresh in-memory Postgres with every migration applied.
+ * Under Vitest, Better Auth turns off its Origin, CSRF and callback-URL checks by default; this turns them back on,
+ * as in production. `enforceOriginCheck: false` restores Better Auth's test default.
+ */
 export async function createTestAuth(
   opts: { magicLinkExpiresIn?: number; enforceOriginCheck?: boolean } = {},
 ): Promise<TestAuth> {
@@ -32,7 +36,8 @@ export async function createTestAuth(
       sent.push({ to, url });
     },
     magicLinkExpiresIn: opts.magicLinkExpiresIn,
-    disableOriginCheck: opts.enforceOriginCheck ? false : undefined,
+    // undefined (not true) keeps Better Auth's own default, which also skips its disableOriginCheck deprecation notice.
+    disableOriginCheck: opts.enforceOriginCheck === false ? undefined : false,
   });
   return { auth, db, sent, close: () => db.destroy() };
 }

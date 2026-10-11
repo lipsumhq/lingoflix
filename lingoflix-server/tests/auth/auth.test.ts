@@ -58,6 +58,48 @@ describe("sign-in links", () => {
     expect(landed.searchParams.get("error")).toBe("INVALID_TOKEN");
   });
 
+  it.each([
+    { field: "callbackURL", value: "https://evil.example/x", code: "INVALID_CALLBACK_URL" },
+    { field: "errorCallbackURL", value: "//evil.example", code: "INVALID_ERROR_CALLBACK_URL" },
+  ])("refuses to send a link whose $field points to another site ($value)", async ({ field, value, code }) => {
+    t = await createTestAuth();
+    // Better Auth logs every refused URL with console.error; keep the expected one out of the test output.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await t.auth.handler(
+      new Request(`${TEST_BASE_URL}/api/auth/sign-in/magic-link`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "learner@example.com",
+          callbackURL: "/connect",
+          errorCallbackURL: "/sign-in?next=%2Fconnect",
+          [field]: value,
+        }),
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code });
+    expect(t.sent).toEqual([]);
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining(`Invalid ${field}: ${value}`));
+  });
+
+  it("refuses a link whose errorCallbackURL was changed to another site instead of redirecting there", async () => {
+    t = await createTestAuth();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const url = new URL((await requestMagicLink(t, "learner@example.com")).url);
+    url.searchParams.set("errorCallbackURL", "https://evil.example/x");
+    const open = (token: string) => {
+      url.searchParams.set("token", token);
+      return t.auth.handler(new Request(url));
+    };
+    // The real token, and an unknown one (which would otherwise bounce to errorCallbackURL with INVALID_TOKEN).
+    for (const res of [await open(url.searchParams.get("token")!), await open("not-a-real-token")]) {
+      expect(res.status).toBe(403);
+      expect(res.headers.get("location")).toBeNull();
+    }
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("Invalid callbackURL: https://evil.example/x"));
+  });
+
   it("keeps only a hash of the link token in the database", async () => {
     t = await createTestAuth();
     const token = new URL((await requestMagicLink(t, "learner@example.com")).url).searchParams.get("token")!;
@@ -82,13 +124,16 @@ describe("bearer tokens (the extension)", () => {
     expect(await t.auth.api.getSession({ headers: bearer(`${raw}.forged`) })).toBeNull();
   });
 
-  it("signing out with the bearer token ends the session", async () => {
+  it.each<{ from: string; headers: Record<string, string> }>([
+    { from: "no Origin header", headers: {} },
+    { from: "the extension's Origin", headers: { origin: TEST_EXTENSION_ORIGIN } },
+  ])("signing out with the bearer token ends the session ($from)", async ({ headers }) => {
     t = await createTestAuth();
     const { bearer: token } = await signInWithMagicLink(t, "learner@example.com");
     const res = await t.auth.handler(
       new Request(`${TEST_BASE_URL}/api/auth/sign-out`, {
         method: "POST",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        headers: { ...headers, authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: "{}",
       }),
     );
@@ -116,7 +161,7 @@ describe("Google", () => {
 
 describe("trusted origins", () => {
   it("accepts a cookie request from the LingoFlix extension and refuses one from another site", async () => {
-    t = await createTestAuth({ enforceOriginCheck: true });
+    t = await createTestAuth();
     // Better Auth logs every refused origin with console.error; keep the expected one out of the test output.
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const { res } = await signInWithMagicLink(t, "learner@example.com");
