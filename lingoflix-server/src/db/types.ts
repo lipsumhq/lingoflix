@@ -9,10 +9,7 @@ export interface UninstallFeedbackTable {
   comment: string | null;
 }
 
-/**
- * Our tables. Better Auth's tables ("user", "session", "account", "verification") are created by our migrations
- * but read and written only by Better Auth, so they are not listed here.
- */
+/** Our tables: only the goodbye answers. The sign-in tables are gone (migration `drop_sign_in`). */
 export interface Database {
   uninstall_feedback: UninstallFeedbackTable;
 }
