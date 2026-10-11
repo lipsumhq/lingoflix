@@ -1,7 +1,7 @@
 import { REMINDER_ID, reminderNotification, reminderUrl } from './notification';
 import type { NotificationPermission } from './permission';
 import { nextReminderTime, shouldNotify } from './schedule';
-import { loadActivity, loadReminders, watchReminders } from './store';
+import { clearActivity, loadActivity, loadReminders, watchReminders } from './store';
 
 /** Reminders spec §6: the one alarm, always set for the next reminder (or cleared). */
 export const REMINDER_ALARM = 'study-reminder';
@@ -61,7 +61,8 @@ export function installReminders(deps: ReminderDeps): ReminderService {
       .then(async () => {
         const [reminders, granted] = await Promise.all([loadReminders(), permission.has()]);
         if (!reminders.enabled || !granted) {
-          await browser.alarms.clear(REMINDER_ALARM);
+          // The watch record is kept only while reminders are on (reminders spec §5, §6).
+          await Promise.all([browser.alarms.clear(REMINDER_ALARM), clearActivity()]);
           return;
         }
         await browser.alarms.create(REMINDER_ALARM, { when: nextReminderTime(from(), reminders.time, reminders.days) });

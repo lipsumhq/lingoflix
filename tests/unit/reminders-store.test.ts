@@ -4,6 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { REMINDER_ID, REMINDER_TITLE, reminderMessage, reminderNotification, reminderUrl } from '@/lib/reminders/notification';
 import {
   DEFAULT_REMINDERS,
+  clearActivity,
   loadActivity,
   loadReminders,
   normalizeActivity,
@@ -100,6 +101,40 @@ describe('watch activity', () => {
     await recordWatched(null, EVENING);
     await recordWatched({ id: '1; javascript:alert(1)', title: 'Bad' }, EVENING);
     expect(await storage.getItem('local:activity')).toEqual({ lastWatchedOn: '2026-10-14', show: SHOW, streak: 3 });
+  });
+
+  it('is deleted by clearActivity', async () => {
+    await updateReminders((r) => ({ ...r, enabled: true }));
+    await recordWatched(SHOW, EVENING);
+    await clearActivity();
+    expect(await storage.getItem('local:activity')).toBeNull();
+  });
+
+  it('a watch recorded at the moment reminders are turned off leaves no record', async () => {
+    await updateReminders((r) => ({ ...r, enabled: true }));
+    // The watch reads the settings (still on) before the turn-off, and its own read of the record is slow.
+    const getItem = storage.getItem.bind(storage);
+    vi.spyOn(storage, 'getItem').mockImplementation(async (key: Parameters<typeof storage.getItem>[0]) => {
+      if (key === 'local:activity') await new Promise((resolve) => setTimeout(resolve, 30));
+      return getItem(key);
+    });
+    await Promise.all([
+      recordWatched(SHOW, EVENING),
+      updateReminders((r) => ({ ...r, enabled: false })).then(() => clearActivity()),
+    ]);
+    expect(await storage.getItem('local:activity')).toBeNull();
+  });
+
+  it('a failed write or delete leaves later ones working', async () => {
+    await updateReminders((r) => ({ ...r, enabled: true }));
+    vi.spyOn(storage, 'setItem').mockRejectedValueOnce(new Error('disk full'));
+    await expect(recordWatched(SHOW, EVENING)).rejects.toThrow('disk full');
+    await recordWatched(SHOW, EVENING);
+    expect(await loadActivity()).toEqual({ lastWatchedOn: '2026-10-14', show: SHOW });
+    vi.spyOn(storage, 'removeItem').mockRejectedValueOnce(new Error('busy'));
+    await expect(clearActivity()).rejects.toThrow('busy');
+    await clearActivity();
+    expect(await storage.getItem('local:activity')).toBeNull();
   });
 });
 

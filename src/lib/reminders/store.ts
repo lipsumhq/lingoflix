@@ -90,13 +90,32 @@ export async function loadActivity(): Promise<Activity> {
 }
 
 /**
+ * The watch record is written and deleted one job at a time, so a watch heard as reminders are turned off can't
+ * outlive the delete: a write that started first finishes before it, and one queued after it finds reminders off.
+ */
+let activityWrites: Promise<unknown> = Promise.resolve();
+
+function oneActivityWrite(job: () => Promise<void>): Promise<void> {
+  const run = activityWrites.then(job);
+  activityWrites = run.catch(() => undefined);
+  return run;
+}
+
+/**
  * Reminders spec §5: a video is playing on Netflix now. Records today's local date and the show, but only while
  * reminders are on, so nothing about viewing is kept unless the learner asked for reminders. A missing or invalid
  * show keeps the stored one.
  */
-export async function recordWatched(show: unknown, now: number = Date.now()): Promise<void> {
-  if (!(await loadReminders()).enabled) return;
-  const stored = await storage.getItem(ACTIVITY_KEY);
-  const next: Activity = { lastWatchedOn: localDate(now), show: parseShow(show) ?? normalizeActivity(stored).show };
-  await storage.setItem(ACTIVITY_KEY, keepUnknown(stored, next));
+export function recordWatched(show: unknown, now: number = Date.now()): Promise<void> {
+  return oneActivityWrite(async () => {
+    if (!(await loadReminders()).enabled) return;
+    const stored = await storage.getItem(ACTIVITY_KEY);
+    const next: Activity = { lastWatchedOn: localDate(now), show: parseShow(show) ?? normalizeActivity(stored).show };
+    await storage.setItem(ACTIVITY_KEY, keepUnknown(stored, next));
+  });
+}
+
+/** Deletes the watch record: the background does so whenever reminders are off or the permission is gone (spec §6). */
+export function clearActivity(): Promise<void> {
+  return oneActivityWrite(() => storage.removeItem(ACTIVITY_KEY));
 }

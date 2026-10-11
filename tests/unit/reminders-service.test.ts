@@ -1,3 +1,4 @@
+import { storage } from '#imports';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { REMINDER_ID } from '@/lib/reminders/notification';
@@ -134,6 +135,26 @@ describe('setting the alarm', () => {
     await vi.waitFor(async () => expect(await scheduled()).toBe(at(14, 20)));
     change(false);
     await vi.waitFor(async () => expect(await scheduled()).toBeUndefined());
+  });
+});
+
+describe('the watch record', () => {
+  it('is deleted when reminders are turned off', async () => {
+    await turnOn();
+    await recordWatched(SHOW, at(14, 18));
+    setup();
+    await updateReminders((r) => ({ ...r, enabled: false }));
+    await vi.waitFor(async () => expect(await storage.getItem('local:activity')).toBeNull());
+  });
+
+  it('is deleted when the permission is removed', async () => {
+    await turnOn();
+    await recordWatched(SHOW, at(14, 18));
+    const { change } = setup();
+    await settle();
+    expect(await storage.getItem('local:activity')).not.toBeNull();
+    change(false);
+    await vi.waitFor(async () => expect(await storage.getItem('local:activity')).toBeNull());
   });
 });
 
