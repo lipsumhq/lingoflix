@@ -12,6 +12,7 @@
     "compile": "next typegen && tsc --noEmit",
     "db:make": "kysely migrate make",
     "db:migrate": "kysely migrate latest",
+    "db:migrate:local": "kysely migrate latest -e local",
     "db:list": "kysely migrate list",
     "auth:check": "auth check schema --config src/lib/auth-cli.ts"
   },

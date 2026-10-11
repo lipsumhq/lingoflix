@@ -33,7 +33,7 @@ Not affiliated with or endorsed by Netflix.
 | Folder | What it is |
 |---|---|
 | [`lingoflix-extension/`](./lingoflix-extension) | The Chrome extension (WXT, React, TypeScript) |
-| `lingoflix-server/` | The website and API (Next.js), coming with the subscription |
+| [`lingoflix-server/`](./lingoflix-server) | The website and API (Next.js): sign-in, Premium, the AI endpoint |
 | [`docs/`](./docs) | Design specs and implementation plans |
 
 ## Development
@@ -42,10 +42,12 @@ Not affiliated with or endorsed by Netflix.
 pnpm install     # installs every package in the workspace
 pnpm test        # unit tests
 pnpm compile     # type-check
-pnpm build       # production builds (extension → lingoflix-extension/.output/chrome-mv3)
+pnpm build       # production builds (extension → lingoflix-extension/.output/chrome-mv3, server → lingoflix-server/.next)
 ```
 
 See [`lingoflix-extension/README.md`](./lingoflix-extension/README.md) for trying the extension on Netflix.
+
+See [`lingoflix-server/README.md`](./lingoflix-server/README.md) for running the website and API locally.
 
 ## Support
 
