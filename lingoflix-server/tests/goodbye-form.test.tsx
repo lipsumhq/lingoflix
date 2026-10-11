@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GoodbyeForm } from "@/app/goodbye/GoodbyeForm";
 import GoodbyePage from "@/app/goodbye/page";
@@ -33,6 +33,14 @@ describe("GoodbyeForm", () => {
     expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
   });
 
+  it("moves focus to the thank-you message, which screen readers then read out", async () => {
+    render(<GoodbyeForm submit={vi.fn(async () => true)} />);
+    choose("It costs too much");
+    send();
+    const thanks = await screen.findByText("Thanks for telling us.");
+    await waitFor(() => expect(document.activeElement).toBe(thanks));
+  });
+
   it("sends a null comment when none was written", async () => {
     const submit = vi.fn(async () => true);
     render(<GoodbyeForm submit={submit} />);
@@ -51,12 +59,15 @@ describe("GoodbyeForm", () => {
           throw new TypeError("Failed to fetch");
         }),
     ],
-  ])("says so when %s", async (_label, makeFetch) => {
+  ])("says so when %s, and leaves focus on the Send button to try again", async (_label, makeFetch) => {
     vi.stubGlobal("fetch", makeFetch());
     render(<GoodbyeForm />);
     choose("It costs too much");
     send();
     expect(await screen.findByText("Couldn't send that. You can close this page.")).toBeTruthy();
+    const button = screen.getByRole("button", { name: "Send" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    await waitFor(() => expect(document.activeElement).toBe(button));
   });
 
   it("limits the comment to 500 characters and counts them", () => {

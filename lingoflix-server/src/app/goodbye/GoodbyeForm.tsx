@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   GOODBYE_COMMENT_MAX,
   GOODBYE_REASONS,
@@ -31,10 +31,19 @@ export function GoodbyeForm({ submit = postGoodbye }: { submit?: (feedback: Good
   const [reason, setReason] = useState<GoodbyeReason | null>(null);
   const [comment, setComment] = useState("");
   const [state, setState] = useState<FormState>("idle");
+  const thanksRef = useRef<HTMLParagraphElement>(null);
+  const sendRef = useRef<HTMLButtonElement>(null);
+
+  // The focused Send button is disabled while sending and removed on success, so move focus with the outcome:
+  // to the thank-you message, which screen readers then read out, or back to Send to try again.
+  useEffect(() => {
+    if (state === "sent") thanksRef.current?.focus();
+    else if (state === "failed") sendRef.current?.focus();
+  }, [state]);
 
   if (state === "sent") {
     return (
-      <p role="status" className="text-lg font-bold">
+      <p ref={thanksRef} tabIndex={-1} role="status" className="text-lg font-bold outline-none">
         Thanks for telling us.
       </p>
     );
@@ -86,6 +95,7 @@ export function GoodbyeForm({ submit = postGoodbye }: { submit?: (feedback: Good
       </div>
 
       <button
+        ref={sendRef}
         type="submit"
         disabled={!reason || state === "sending"}
         className="rounded-xl border-2 px-5 py-2 font-bold disabled:opacity-50"

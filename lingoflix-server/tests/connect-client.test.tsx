@@ -7,6 +7,8 @@ const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
 const TOKEN = "session-token-1234567890";
 const STORE_URL = "https://chromewebstore.google.com/detail/lingoflix/abcdefghijklmnopabcdefghijklmnop";
 const CONNECTED = "You're all set. LingoFlix is signed in. You can close this tab and go back to Netflix.";
+const FAILED = /LingoFlix didn't answer\. Make sure it's turned on, then/;
+const RECEIVING_END_MISSING = "Could not establish connection. Receiving end does not exist.";
 
 afterEach(() => {
   cleanup();
@@ -51,7 +53,7 @@ describe("ConnectClient", () => {
   it("asks to install LingoFlix when Chrome cannot reach it", () => {
     const { runtime, answer } = fakeRuntime();
     render(<ConnectClient extensionId={EXTENSION_ID} token={TOKEN} storeUrl={STORE_URL} runtime={runtime} />);
-    answer(undefined, "Could not establish connection. Receiving end does not exist.");
+    answer(undefined, RECEIVING_END_MISSING);
     expect(screen.getByText("Install LingoFlix first")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Get LingoFlix from the Chrome Web Store" }).getAttribute("href"),
@@ -59,11 +61,34 @@ describe("ConnectClient", () => {
     expect(document.body.innerHTML).not.toContain(TOKEN);
   });
 
-  it("treats any answer other than { ok: true } as not connected", () => {
+  it("treats any answer other than { ok: true } as a failed attempt, with Try again", () => {
     const { runtime, answer } = fakeRuntime();
     render(<ConnectClient extensionId={EXTENSION_ID} token={TOKEN} storeUrl={STORE_URL} runtime={runtime} />);
     answer({ ok: false });
-    expect(screen.getByText("Install LingoFlix first")).toBeTruthy();
+    expect(screen.getByText(FAILED)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText("Install LingoFlix first")).toBeNull();
+  });
+
+  it("treats a Chrome error other than a missing extension as a failed attempt, with Try again", () => {
+    const { runtime, answer } = fakeRuntime();
+    render(<ConnectClient extensionId={EXTENSION_ID} token={TOKEN} storeUrl={STORE_URL} runtime={runtime} />);
+    answer(undefined, "The message port closed before a response was received.");
+    expect(screen.getByText(FAILED)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText("Install LingoFlix first")).toBeNull();
+  });
+
+  it("treats a sendMessage that throws as a failed attempt, with Try again", () => {
+    const runtime: ExtensionRuntime = {
+      sendMessage() {
+        throw new Error("Invalid extension id");
+      },
+    };
+    render(<ConnectClient extensionId={EXTENSION_ID} token={TOKEN} storeUrl={STORE_URL} runtime={runtime} />);
+    expect(screen.getByText(FAILED)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByText("Install LingoFlix first")).toBeNull();
   });
 
   it("sends nothing without an extension ID, and says the store listing is coming", () => {
@@ -103,7 +128,7 @@ describe("ConnectClient", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByText(/LingoFlix didn't answer\. Make sure it's turned on, then/)).toBeTruthy();
+    expect(screen.getByText(FAILED)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(calls).toHaveLength(2);
@@ -125,5 +150,53 @@ describe("ConnectClient", () => {
       calls[0]!.callback({ ok: true });
     });
     expect(screen.getByText(/LingoFlix didn't answer/)).toBeTruthy();
+  });
+
+  it("keeps one status region and changes what it says", () => {
+    vi.useFakeTimers();
+    const { runtime, answer } = fakeRuntime();
+    render(
+      <ConnectClient extensionId={EXTENSION_ID} token={TOKEN} storeUrl={STORE_URL} runtime={runtime} timeoutMs={5000} />,
+    );
+    const region = screen.getByRole("status");
+    expect(region.textContent).toContain("Connecting LingoFlix...");
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.getByRole("status")).toBe(region);
+    expect(region.textContent).toMatch(FAILED);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    answer(undefined, RECEIVING_END_MISSING);
+    expect(screen.getByRole("status")).toBe(region);
+    expect(region.textContent).toContain("Install LingoFlix first");
+
+    cleanup();
+    const second = fakeRuntime();
+    render(<ConnectClient extensionId={EXTENSION_ID} token={TOKEN} storeUrl={STORE_URL} runtime={second.runtime} />);
+    const region2 = screen.getByRole("status");
+    second.answer({ ok: true });
+    expect(screen.getByRole("status")).toBe(region2);
+    expect(region2.textContent).toContain(CONNECTED);
+  });
+
+  it.each([
+    ["LingoFlix answers", { ok: true }, undefined, () => screen.getByText(CONNECTED)],
+    ["Chrome can't reach LingoFlix", undefined, RECEIVING_END_MISSING, () => screen.getByText("Install LingoFlix first")],
+    ["LingoFlix refuses", { ok: false }, undefined, () => screen.getByText(FAILED)],
+  ])("after Try again, moves focus to the result when %s", (_label, response, lastError, result) => {
+    vi.useFakeTimers();
+    const { runtime, answer } = fakeRuntime();
+    render(
+      <ConnectClient extensionId={EXTENSION_ID} token={TOKEN} storeUrl={STORE_URL} runtime={runtime} timeoutMs={5000} />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(document.activeElement).not.toBe(document.body);
+    answer(response, lastError);
+    expect(document.activeElement).toBe(result());
   });
 });

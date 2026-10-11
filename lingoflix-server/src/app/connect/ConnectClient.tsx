@@ -28,6 +28,17 @@ function pageRuntime(): ExtensionRuntime | null {
 const isConnected = (response: unknown) =>
   typeof response === "object" && response !== null && (response as { ok?: unknown }).ok === true;
 
+/** Chrome's lastError when no installed extension has this ID (or it doesn't let this site message it). */
+const isNotInstalled = (lastError: ExtensionRuntime["lastError"]) =>
+  lastError?.message?.includes("Receiving end does not exist") === true;
+
+const MESSAGES: Record<ConnectState, string> = {
+  connecting: "Connecting LingoFlix...",
+  connected: "You're all set. LingoFlix is signed in. You can close this tab and go back to Netflix.",
+  missing: "Install LingoFlix first",
+  failed: "LingoFlix didn't answer. Make sure it's turned on, then ",
+};
+
 /**
  * Hands the session token to the extension with `chrome.runtime.sendMessage`. The token is never shown on screen,
  * logged or put in a URL. (Like any client-component prop it travels in the page's server-rendered data; the page is
@@ -38,6 +49,9 @@ export function ConnectClient({ extensionId, token, storeUrl, runtime, timeoutMs
   // Each attempt gets a number. An answer or a timeout for an older attempt (or after unmount) is ignored.
   const attempt = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  // Set once Try again is used: that button disappears while connecting, so focus moves to the message instead.
+  const focusMessage = useRef(false);
 
   const connect = useCallback(() => {
     clearTimeout(timer.current);
@@ -57,11 +71,14 @@ export function ConnectClient({ extensionId, token, storeUrl, runtime, timeoutMs
     timer.current = setTimeout(() => settle("failed"), timeoutMs);
     try {
       target.sendMessage(extensionId, { type: "lingoflix:session", token }, (response) => {
-        // Chrome sets lastError only while this callback runs, e.g. when LingoFlix isn't installed.
-        settle(target.lastError || !isConnected(response) ? "missing" : "connected");
+        // Chrome sets lastError only while this callback runs. Only "Receiving end does not exist" means LingoFlix
+        // isn't installed; any other error or answer is a failed attempt that Try again can repeat.
+        const { lastError } = target;
+        if (lastError) settle(isNotInstalled(lastError) ? "missing" : "failed");
+        else settle(isConnected(response) ? "connected" : "failed");
       });
     } catch {
-      settle("missing");
+      settle("failed");
     }
   }, [extensionId, runtime, timeoutMs, token]);
 
@@ -74,25 +91,32 @@ export function ConnectClient({ extensionId, token, storeUrl, runtime, timeoutMs
     };
   }, [connect]);
 
-  if (state === "connecting") {
-    return (
-      <p role="status" className="mt-6 text-lg">
-        Connecting LingoFlix...
+  useEffect(() => {
+    if (focusMessage.current) messageRef.current?.focus();
+  }, [state]);
+
+  const tryAgain = () => {
+    focusMessage.current = true;
+    connect();
+  };
+
+  // One status region stays mounted and only its contents change, so screen readers announce every step.
+  return (
+    <div role="status" className="mt-6 space-y-2">
+      <p
+        ref={messageRef}
+        tabIndex={-1}
+        className={`text-lg outline-none ${state === "connected" || state === "missing" ? "font-bold" : ""}`}
+      >
+        {MESSAGES[state]}
+        {state === "failed" && (
+          <button type="button" onClick={tryAgain} className="font-bold underline">
+            Try again
+          </button>
+        )}
       </p>
-    );
-  }
-  if (state === "connected") {
-    return (
-      <p role="status" className="mt-6 text-lg font-bold">
-        {"You're all set. LingoFlix is signed in. You can close this tab and go back to Netflix."}
-      </p>
-    );
-  }
-  if (state === "missing") {
-    return (
-      <div role="status" className="mt-6 space-y-2">
-        <p className="text-lg font-bold">Install LingoFlix first</p>
-        {storeUrl ? (
+      {state === "missing" &&
+        (storeUrl ? (
           <>
             <p>
               <a href={storeUrl} className="font-bold underline">
@@ -103,16 +127,7 @@ export function ConnectClient({ extensionId, token, storeUrl, runtime, timeoutMs
           </>
         ) : (
           <p>LingoFlix will be in the Chrome Web Store soon.</p>
-        )}
-      </div>
-    );
-  }
-  return (
-    <p role="alert" className="mt-6 text-lg">
-      {"LingoFlix didn't answer. Make sure it's turned on, then "}
-      <button type="button" onClick={connect} className="font-bold underline">
-        Try again
-      </button>
-    </p>
+        ))}
+    </div>
   );
 }

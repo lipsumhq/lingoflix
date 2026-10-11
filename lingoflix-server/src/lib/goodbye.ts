@@ -25,7 +25,13 @@ export interface GoodbyeFeedback {
 const isReason = (value: unknown): value is GoodbyeReason =>
   typeof value === "string" && (GOODBYE_REASONS as readonly string[]).includes(value);
 
-/** `{ reason, comment? }` and nothing else: a known reason and an optional comment of at most 500 characters. */
+/** Any control character except tab, line feed and carriage return (Postgres text can't even hold NUL). */
+const CONTROL_CHARACTER = /(?![\t\n\r])\p{Cc}/u;
+
+/**
+ * `{ reason, comment? }` and nothing else: a known reason and an optional comment of at most 500 characters,
+ * with no control characters other than tabs and line breaks.
+ */
 export function parseGoodbye(body: unknown): GoodbyeFeedback | null {
   if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
   const record = body as Record<string, unknown>;
@@ -34,6 +40,7 @@ export function parseGoodbye(body: unknown): GoodbyeFeedback | null {
   if (!isReason(reason)) return null;
   if (comment === undefined || comment === null) return { reason, comment: null };
   if (typeof comment !== "string") return null;
+  if (CONTROL_CHARACTER.test(comment)) return null;
   const trimmed = comment.trim();
   if (trimmed.length > GOODBYE_COMMENT_MAX) return null;
   return { reason, comment: trimmed === "" ? null : trimmed };

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/session", () => ({ getCurrentSession: vi.fn() }));
 
-import ConnectPage from "@/app/connect/page";
+import ConnectPage, { dynamic } from "@/app/connect/page";
 import { getCurrentSession } from "@/lib/session";
 
 const SESSION = { user: { id: "u1", email: "learner@example.com", name: "" }, token: "session-token-abc" };
@@ -17,6 +17,10 @@ afterEach(() => {
 });
 
 describe("/connect", () => {
+  it("is rendered for every request and never cached, since its page data carries the session token", () => {
+    expect(dynamic).toBe("force-dynamic");
+  });
+
   it("sends signed-out visitors to sign in first, then back here", async () => {
     vi.mocked(getCurrentSession).mockResolvedValue(null);
     const error = await ConnectPage().catch((err: unknown) => err);

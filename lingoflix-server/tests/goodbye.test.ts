@@ -26,12 +26,22 @@ describe("parseGoodbye", () => {
     expect(parseGoodbye({ reason: "other", comment: "x".repeat(501) })).toBeNull();
   });
 
+  it("keeps line breaks and tabs inside a comment", () => {
+    expect(parseGoodbye({ reason: "other", comment: "Line one\r\nLine two\tend" })).toEqual({
+      reason: "other",
+      comment: "Line one\r\nLine two\tend",
+    });
+  });
+
   it.each([
     ["an unknown reason", { reason: "hates-netflix" }],
     ["no reason", { comment: "hi" }],
     ["a reason that is not a string", { reason: 1 }],
     ["a comment that is not a string", { reason: "other", comment: 42 }],
     ["an extra field", { reason: "other", email: "a@example.com" }],
+    ["a comment with a NUL character", { reason: "other", comment: "a\u0000b" }],
+    ["a comment with a bell character", { reason: "other", comment: "a\u0007b" }],
+    ["a comment with a vertical tab", { reason: "other", comment: "a\u000Bb" }],
     ["an array", ["other"]],
     ["null", null],
     ["a string", "other"],
@@ -95,6 +105,8 @@ describe("POST /api/goodbye", () => {
   it.each([
     ["an unknown reason", JSON.stringify({ reason: "hates-netflix" })],
     ["a 501-character comment", JSON.stringify({ reason: "other", comment: "x".repeat(501) })],
+    ["a comment with a NUL character", JSON.stringify({ reason: "other", comment: "a\u0000b" })],
+    ["a comment with a bell character", JSON.stringify({ reason: "other", comment: "a\u0007b" })],
     ["a body that is not JSON", "reason=other"],
     ["an empty body", ""],
     // Valid JSON (trailing spaces are allowed), so only the size limit can reject it.

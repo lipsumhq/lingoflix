@@ -5,6 +5,8 @@ import { chromeStoreUrl } from "@/lib/site";
 import { ConnectClient } from "./ConnectClient";
 
 export const metadata: Metadata = { title: "Connect LingoFlix" };
+// Its server-rendered data carries the session token, so it is rendered per request and never cached.
+export const dynamic = "force-dynamic";
 
 /**
  * Spec §7.3: hands the signed-in web session's token to the extension. The extension and the website share
