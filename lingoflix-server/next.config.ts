@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  // No page may be shown inside another site's frame (clickjacking on sign-in, /connect and the account page).
+  // No page may be shown inside another site's frame (clickjacking).
   async headers() {
     return [
       {

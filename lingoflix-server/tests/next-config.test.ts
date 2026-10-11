@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import nextConfig from "../next.config";
 
 describe("next.config headers", () => {
-  it("forbids framing on every page, so no other site can overlay the sign-in or account pages", async () => {
+  it("forbids framing on every page, so no other site can overlay them", async () => {
     expect(nextConfig.headers).toBeTypeOf("function");
     const rules = await nextConfig.headers!();
     const everyPath = rules.find((rule) => rule.source === "/:path*");
