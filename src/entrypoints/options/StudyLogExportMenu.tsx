@@ -9,6 +9,8 @@ export interface StudyLogExportMenuProps {
   /** Full backup: off when there are no saved items and no explanations. */
   canBackup: boolean;
   onExport(kind: ExportKind): void;
+  /** Offers "Import backup…" after the export formats. Always available: it is how a backup comes back after Reset all. */
+  onImport?(): void;
 }
 
 const FORMATS: readonly { kind: ExportKind; label: string }[] = [
@@ -20,7 +22,7 @@ const FORMATS: readonly { kind: ExportKind; label: string }[] = [
 const menuItem = `flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-bold text-ink hover:bg-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${focusRing}`;
 
 /** v2 spec §7: Export ▾ on the Study Log page. */
-export function StudyLogExportMenu({ canExportView, canBackup, onExport }: StudyLogExportMenuProps) {
+export function StudyLogExportMenu({ canExportView, canBackup, onExport, onImport }: StudyLogExportMenuProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -89,6 +91,22 @@ export function StudyLogExportMenu({ canExportView, canBackup, onExport }: Study
               {label}
             </button>
           ))}
+          {onImport && (
+            <>
+              <div role="separator" className="my-1 h-0.5 rounded-full bg-soft" />
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItem}
+                onClick={() => {
+                  close();
+                  onImport();
+                }}
+              >
+                Import backup…
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

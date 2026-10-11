@@ -10,6 +10,7 @@ import { EXPORT_MIME, exportFileName, toAnki, toBackup, toCsv, type ExportKind }
 import { filterItems, newestFirst, type TypeFilter } from '@/lib/study-log/filter';
 import { episodeLabel, savedItemsLabel, seasonLabel } from '@/lib/study-log/format';
 import { groupStudyLog, type StudyLogTree as Tree } from '@/lib/study-log/group';
+import { IMPORT_ERROR_COPY, IMPORT_FAILED_COPY, importBackup, importSummaryText } from '@/lib/study-log/import';
 import { deleteItems, listItems, migrateIfNeeded } from '@/lib/study-log/items';
 import { listExplanations, resetStudyLog, watchStudyLog } from '@/lib/study-log/store';
 import type { SavedItem } from '@/lib/study-log/types';
@@ -110,6 +111,18 @@ export function StudyLogTab({
   const wide = useWideLayout();
   const grid = useRef<HTMLDivElement>(null);
   const lastOpenId = useRef<string | null>(null);
+  const [importStatus, setImportStatus] = useState<{ tone: 'good' | 'bad'; text: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  /** v2 spec §7.4: adds the chosen backup; the list reloads through watchStudyLog. */
+  const importFile = async (file: File) => {
+    try {
+      const result = await importBackup(await file.text());
+      setImportStatus(result.ok ? { tone: 'good', text: importSummaryText(result.summary) } : { tone: 'bad', text: IMPORT_ERROR_COPY[result.error] });
+    } catch {
+      setImportStatus({ tone: 'bad', text: IMPORT_FAILED_COPY });
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -195,7 +208,12 @@ export function StudyLogTab({
 
   // Full backup also covers explanation history, which exists even with no saved items (v2 spec §7.3).
   const exportMenu = (
-    <StudyLogExportMenu canExportView={visible.length > 0} canBackup={hasItems || data.historyCount > 0} onExport={(kind) => void exportAs(kind)} />
+    <StudyLogExportMenu
+      canExportView={visible.length > 0}
+      canBackup={hasItems || data.historyCount > 0}
+      onExport={(kind) => void exportAs(kind)}
+      onImport={() => fileInput.current?.click()}
+    />
   );
 
   const detail = selectedItem && (
@@ -237,6 +255,22 @@ export function StudyLogTab({
           )}
         </div>
       </div>
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".json,application/json"
+        aria-label="Backup file"
+        hidden
+        onChange={(e) => {
+          const file = e.currentTarget.files?.[0];
+          e.currentTarget.value = ''; // choosing the same file again fires change again
+          if (file) void importFile(file);
+        }}
+      />
+      {/* Kept in the accessibility tree while empty (sr-only, not display: none), so its first message is announced. */}
+      <p role="status" className={importStatus ? `text-sm font-bold ${importStatus.tone === 'bad' ? 'text-danger' : 'text-ink'}` : 'sr-only'}>
+        {importStatus?.text ?? ''}
+      </p>
 
       {items.length === 0 ? (
         <section className={`${card} flex items-start gap-3.5 px-5 py-5`}>
