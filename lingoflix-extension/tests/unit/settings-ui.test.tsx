@@ -69,7 +69,7 @@ describe('Claude API key card', () => {
     expect(await screen.findByText('No key saved yet.')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Claude API key'), { target: { value: 'two words' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByText("That doesn't look like an API key.")).toBeTruthy();
+    expect(await screen.findByText("This doesn't look like a Claude or OpenAI key.")).toBeTruthy();
   });
 
   it("says so when the background can't be reached to save, test, or remove the key", async () => {

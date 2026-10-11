@@ -1,4 +1,5 @@
 import { browser } from '#imports';
+import type { Provider } from '@/lib/ai/provider';
 import type { Show } from '@/lib/reminders/store';
 import type { Explanation, SaveSuggestion } from '@/lib/study-log/types';
 
@@ -6,7 +7,8 @@ export type KeyTestResult = 'valid' | 'rejected' | 'network' | 'error';
 
 /** Requests answered by the background worker (spec §6.3, v2 spec §4.2), with their responses. */
 export interface BackgroundRequests {
-  'api-key:status': { request: object; response: { set: boolean; masked: string | null } };
+  /** `provider` is read from the saved key: null when none is saved, or it is neither Claude's nor OpenAI's. */
+  'api-key:status': { request: object; response: { set: boolean; masked: string | null; provider: Provider | null } };
   'api-key:set': { request: { key: string }; response: { ok: boolean } };
   'api-key:remove': { request: object; response: { ok: true } };
   'api-key:test': { request: { key?: string }; response: { result: KeyTestResult; message: string } };

@@ -1,10 +1,11 @@
-import { CLAUDE_IDLE_TIMEOUT_MS, CLAUDE_MODEL } from '@/lib/config';
+import { CLAUDE_IDLE_TIMEOUT_MS } from '@/lib/config';
 import type { Explanation, FollowUp, NewExplanation, SaveSuggestion } from '@/lib/study-log/types';
 import type { StoryLine } from '@/lib/subtitles/context';
 import type { AiClient, StreamParams, StreamResult, SystemBlock, ToolCall } from './client';
 import { learningHistoryBlock, splitStory, storyBlock, type HistorySources } from './context-blocks';
 import { toExplainError } from './errors';
 import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, type ExplainRequest } from './prompt';
+import { PROVIDERS, providerOf } from './provider';
 import { ERROR_COPY, parseClientMessage, type ExplainErrorCode, type ExplainServerMessage } from './protocol';
 import { SUGGEST_SAVES_TOOL, SUGGEST_SAVES_TOOL_NAME, validateSuggestions } from './suggestions';
 
@@ -32,7 +33,7 @@ const UNREADABLE = 'LingoFlix sent a request it could not read.';
 const EXPLANATION_GONE = 'This explanation is no longer available.';
 const EMPTY_ANSWER = 'Claude returned an empty answer.';
 
-function explanationFields(request: ExplainRequest, response: string, suggestions: SaveSuggestion[]): NewExplanation {
+function explanationFields(request: ExplainRequest, response: string, suggestions: SaveSuggestion[], model: string): NewExplanation {
   const title = request.title;
   return {
     phrase: request.phrase,
@@ -47,7 +48,7 @@ function explanationFields(request: ExplainRequest, response: string, suggestion
     episodeTitle: title?.episodeTitle ?? null,
     context: request.context,
     explanationLanguage: request.language,
-    model: CLAUDE_MODEL,
+    model,
     suggestions,
   };
 }
@@ -133,7 +134,9 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
     const message = parseClientMessage(raw);
     if (!message) return fail('api', UNREADABLE);
     const apiKey = await deps.getApiKey();
-    if (!apiKey) return fail('no-key');
+    // A key saved before Save checked the provider, that is neither Claude's nor OpenAI's, counts as none.
+    const provider = apiKey ? providerOf(apiKey) : null;
+    if (!apiKey || !provider) return fail('no-key');
     if (disconnected) return;
 
     let params: StreamParams;
@@ -150,7 +153,9 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
         tools: [SUGGEST_SAVES_TOOL],
       };
       finish = (result) =>
-        deps.saveExplanation(explanationFields(request, result.text, suggestionsFrom(result.toolCalls, request.phrase)));
+        deps.saveExplanation(
+          explanationFields(request, result.text, suggestionsFrom(result.toolCalls, request.phrase), PROVIDERS[provider].model),
+        );
     } else {
       const explanation = await deps.getExplanation(message.explanationId);
       if (!explanation) return fail('api', EXPLANATION_GONE);

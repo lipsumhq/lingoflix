@@ -5,8 +5,8 @@ import type { AiClient, StreamParams, SystemBlock, ToolCall } from '@/lib/ai/cli
 import { serveExplainPort, type ExplainPort, type ExplainServiceDeps } from '@/lib/ai/explain-service';
 import type { ExplainRequest } from '@/lib/ai/prompt';
 import type { ExplainServerMessage } from '@/lib/ai/protocol';
+import { PROVIDERS } from '@/lib/ai/provider';
 import { SUGGEST_SAVES_TOOL } from '@/lib/ai/suggestions';
-import { CLAUDE_MODEL } from '@/lib/config';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import { listItems, saveItem, savedKeysFor, suggestionKey } from '@/lib/study-log/items';
 import { appendFollowUp, findExplanation, getExplanation, listExplanations, saveExplanation } from '@/lib/study-log/store';
@@ -47,7 +47,7 @@ const STORED: NewExplanation = {
   episodeTitle: 'Holly, Jolly',
   context: REQUEST.context,
   explanationLanguage: 'ko',
-  model: CLAUDE_MODEL,
+  model: PROVIDERS.claude.model,
   suggestions: [{ type: 'idiom', text: 'call it a night', meaning: '그만 자러 가다' }],
 };
 
@@ -133,7 +133,7 @@ describe('explain service: explanations', () => {
       seasonNumber: 1,
       episodeNumber: 3,
       explanationLanguage: 'ko',
-      model: CLAUDE_MODEL,
+      model: 'claude-sonnet-5-5',
       context: REQUEST.context,
       suggestions: [
         { type: 'idiom', text: 'call it a night', meaning: '그만 자러 가다' },
@@ -147,6 +147,15 @@ describe('explain service: explanations', () => {
     expect(systemOf(calls[0]!)[0]).toEqual({ text: expect.stringContaining('Korean (한국어)'), cache: false });
     expect(systemOf(calls[0]!)[0]!.text).toContain('suggest_saves');
     expect(calls[0]!.messages).toEqual([{ role: 'user', content: expect.stringContaining(">>> I'm gonna call it a night.") }]);
+  });
+
+  it('stores the model that wrote the explanation: GPT-6.1 Sol for an OpenAI key (free-own-key spec §4.8)', async () => {
+    const { client } = fakeClient({ deltas: ['ok'] });
+    const { port, sent, send } = fakePort();
+    serveExplainPort(port, deps(client, { getApiKey: async () => 'sk-proj-test-key-0000' }));
+    send({ type: 'start', request: REQUEST });
+    await vi.waitFor(() => expect(sent.at(-1)?.type).toBe('done'));
+    expect(doneOf(sent).explanation.model).toBe('gpt-6.1-sol');
   });
 
   it('without a suggest_saves call, the explanation is stored with no suggestions', async () => {
@@ -302,6 +311,15 @@ describe('explain service: failures', () => {
     const createClient = vi.fn();
     const { port, sent, send } = fakePort();
     serveExplainPort(port, deps(fakeClient().client, { getApiKey: async () => null, createClient }));
+    send({ type: 'start', request: REQUEST });
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'no-key', message: 'Add your Claude API key' }]));
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('a saved key that is not a Claude or OpenAI key counts as no key', async () => {
+    const createClient = vi.fn();
+    const { port, sent, send } = fakePort();
+    serveExplainPort(port, deps(fakeClient().client, { getApiKey: async () => 'legacy-key-1234', createClient }));
     send({ type: 'start', request: REQUEST });
     await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'no-key', message: 'Add your Claude API key' }]));
     expect(createClient).not.toHaveBeenCalled();

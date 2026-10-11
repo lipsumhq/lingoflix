@@ -4,6 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { getApiKey, maskApiKey, removeApiKey, setApiKey } from '@/lib/api-key';
 import { createMessageHandler, type MessageHandlerDeps } from '@/lib/background/message-handler';
 import type { AiClient } from '@/lib/ai/client';
+import { NOT_A_KEY } from '@/lib/ai/provider';
 import { PENDING_SEEK_MAX_AGE_MS, setPendingSeek, takePendingSeek } from '@/lib/pending-seek';
 import { localDate } from '@/lib/reminders/schedule';
 import { loadActivity, recordWatched, updateReminders } from '@/lib/reminders/store';
@@ -14,6 +15,7 @@ import type { NewExplanation } from '@/lib/study-log/types';
 beforeEach(() => fakeBrowser.reset());
 
 const KEY = 'sk-ant-api03-abcdefghijklmnop-wxyz';
+const OPENAI_KEY = 'sk-proj-abcdefghijklmnop-wxyz';
 const FROM_PAGE = { fromExtensionPage: true };
 const FROM_NETFLIX = { fromExtensionPage: false };
 
@@ -68,32 +70,46 @@ describe('API key requests', () => {
     replies.push(await handle({ type: 'api-key:set', key: `  ${KEY}  ` }));
     replies.push(await handle({ type: 'api-key:status' }));
     expect(replies).toEqual([
-      { set: false, masked: null },
+      { set: false, masked: null, provider: null },
       { ok: true },
-      { set: true, masked: maskApiKey(KEY) },
+      { set: true, masked: maskApiKey(KEY), provider: 'claude' },
     ]);
     expect(maskApiKey(KEY)).toBe('sk-ant-…wxyz');
     expect(await getApiKey()).toBe(KEY);
     expect(JSON.stringify(replies)).not.toContain('abcdefghijklmnop');
     expect(await handle({ type: 'api-key:remove' })).toEqual({ ok: true });
-    expect(await handle({ type: 'api-key:status' })).toEqual({ set: false, masked: null });
+    expect(await handle({ type: 'api-key:status' })).toEqual({ set: false, masked: null, provider: null });
   });
 
-  it('refuses keys that are empty or contain spaces, invisible, or non-ASCII characters', async () => {
+  it('saves an OpenAI key and reports its provider', async () => {
+    const { handle } = handlerWith();
+    expect(await handle({ type: 'api-key:set', key: OPENAI_KEY })).toEqual({ ok: true });
+    expect(await handle({ type: 'api-key:status' })).toEqual({ set: true, masked: 'sk-proj…wxyz', provider: 'openai' });
+  });
+
+  it('refuses keys that are empty, contain spaces, invisible, or non-ASCII characters, or are not Claude or OpenAI keys', async () => {
     const { handle } = handlerWith();
     expect(await handle({ type: 'api-key:set', key: '   ' })).toEqual({ ok: false });
     expect(await handle({ type: 'api-key:set', key: 'two words' })).toEqual({ ok: false });
     expect(await handle({ type: 'api-key:set', key: 'sk-ant-\u200babc' })).toEqual({ ok: false });
     expect(await handle({ type: 'api-key:set', key: 'sk-ant-\u00e9abc' })).toEqual({ ok: false });
+    expect(await handle({ type: 'api-key:set', key: 'ant-api03-abcdef' })).toEqual({ ok: false });
+    expect(await handle({ type: 'api-key:set', key: 'AIzaSyabcdef' })).toEqual({ ok: false });
     expect(await getApiKey()).toBeNull();
   });
 
-  it('Test key refuses a typed key that does not look like one, without calling Anthropic', async () => {
+  it('Test key refuses a typed key that does not look like one, without calling the provider', async () => {
     const { handle, createClient } = handlerWith();
-    expect(await handle({ type: 'api-key:test', key: 'two words' })).toEqual({
-      result: 'rejected',
-      message: "That doesn't look like an API key.",
-    });
+    expect(await handle({ type: 'api-key:test', key: 'two words' })).toEqual({ result: 'rejected', message: NOT_A_KEY });
+    expect(await handle({ type: 'api-key:test', key: 'AIzaSyabcdef' })).toEqual({ result: 'rejected', message: NOT_A_KEY });
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('Test key refuses a saved key that is not a Claude or OpenAI key (saved before Save checked)', async () => {
+    await fakeBrowser.storage.local.set({ apiKey: 'legacy-key-1234' });
+    const { handle, createClient } = handlerWith();
+    expect(await handle({ type: 'api-key:status' })).toEqual({ set: true, masked: 'legacy-…1234', provider: null });
+    expect(await handle({ type: 'api-key:test' })).toEqual({ result: 'rejected', message: NOT_A_KEY });
     expect(createClient).not.toHaveBeenCalled();
   });
 
@@ -106,7 +122,7 @@ describe('API key requests', () => {
     await expect(handle({ type: 'api-key:test' }, FROM_NETFLIX)).rejects.toThrow(/Not allowed/);
     expect(createClient).not.toHaveBeenCalled();
     expect(await getApiKey()).toBe(KEY);
-    expect(await handle({ type: 'api-key:status' }, FROM_NETFLIX)).toEqual({ set: true, masked: maskApiKey(KEY) });
+    expect(await handle({ type: 'api-key:status' }, FROM_NETFLIX)).toEqual({ set: true, masked: maskApiKey(KEY), provider: 'claude' });
   });
 
   it('Test key: valid, rejected, or network, using the typed key, else the saved one', async () => {
@@ -128,6 +144,22 @@ describe('API key requests', () => {
     expect(await offline.handle({ type: 'api-key:test' })).toEqual({
       result: 'network',
       message: "Couldn't reach Anthropic. Check your connection.",
+    });
+  });
+
+  it('Test key names OpenAI for an OpenAI key', async () => {
+    await setApiKey(OPENAI_KEY);
+    expect(await handlerWith().handle({ type: 'api-key:test' })).toEqual({ result: 'valid', message: 'Your key works.' });
+    const rejected = handlerWith(async () => {
+      throw APIError.generate(401, { error: { type: 'authentication_error', message: 'invalid' } }, 'x', new Headers());
+    });
+    expect(await rejected.handle({ type: 'api-key:test' })).toEqual({ result: 'rejected', message: 'OpenAI rejected this key.' });
+    const offline = handlerWith(async () => {
+      throw new APIConnectionError({ message: 'fetch failed' });
+    });
+    expect(await offline.handle({ type: 'api-key:test' })).toEqual({
+      result: 'network',
+      message: "Couldn't reach OpenAI. Check your connection.",
     });
   });
 

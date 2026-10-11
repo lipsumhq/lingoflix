@@ -1,6 +1,7 @@
 import { Eye, EyeOff, KeyRound, Trash2, Zap } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { buttonSecondary, card, focusRing, iconTile } from '@/components/styles';
+import { NOT_A_KEY } from '@/lib/ai/provider';
 import { ANTHROPIC_KEYS_URL } from '@/lib/config';
 import { sendToBackground } from '@/lib/messages';
 
@@ -36,7 +37,7 @@ export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
     try {
       const res = await send({ type: 'api-key:set', key: draft });
       if (!res.ok) {
-        setNote({ tone: 'bad', text: "That doesn't look like an API key." });
+        setNote({ tone: 'bad', text: NOT_A_KEY });
         return;
       }
     } catch {

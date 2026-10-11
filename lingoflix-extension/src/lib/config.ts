@@ -6,8 +6,6 @@ export const DONATION_LINKS = [
 export const DONATION_TITLE = 'Enjoying LingoFlix?';
 export const DONATION_COPY = "It's free forever. A coffee keeps it going.";
 
-/** Spec §7.1: one constant for the model. */
-export const CLAUDE_MODEL = 'claude-sonnet-5-5';
 /** Follow-up answers (main spec §7.1). */
 export const CLAUDE_MAX_TOKENS = 1024;
 /** Explanations: room for the suggest_saves call after the text (v2 spec §5.1). */

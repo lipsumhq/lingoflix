@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { CLAUDE_API_BASE_URL, CLAUDE_EXPLAIN_MAX_TOKENS, CLAUDE_MAX_TOKENS, CLAUDE_MODEL } from '@/lib/config';
+import { CLAUDE_API_BASE_URL, CLAUDE_EXPLAIN_MAX_TOKENS, CLAUDE_MAX_TOKENS } from '@/lib/config';
 import type { AiClient, SystemBlock, ToolCall } from './client';
+import { PROVIDERS } from './provider';
 
 type SdkSystemBlock = { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } };
 
@@ -34,7 +35,7 @@ export function createAnthropicClient(apiKey: string): AiClient {
     async stream(params, onText, signal) {
       const tools = params.tools ?? [];
       const body: Parameters<typeof client.messages.stream>[0] = {
-        model: CLAUDE_MODEL,
+        model: PROVIDERS.claude.model,
         max_tokens: params.kind === 'explain' ? CLAUDE_EXPLAIN_MAX_TOKENS : CLAUDE_MAX_TOKENS,
         system: toSdkSystem(params.system),
         messages: params.messages,

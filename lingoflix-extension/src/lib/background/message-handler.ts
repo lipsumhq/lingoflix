@@ -1,6 +1,7 @@
 import { maskApiKey } from '@/lib/api-key';
 import type { AiClient } from '@/lib/ai/client';
 import { toExplainError } from '@/lib/ai/errors';
+import { NOT_A_KEY, PROVIDERS, providerOf } from '@/lib/ai/provider';
 import { cardRows } from '@/lib/ai/suggestions';
 import type { BackgroundResponse } from '@/lib/messages';
 import { suggestionKey } from '@/lib/study-log/items';
@@ -29,11 +30,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
- * A pasted key: printable ASCII only (no spaces, no invisible or non-ASCII characters), a sane length.
- * Anthropic's own check happens in Test key.
+ * A pasted key: printable ASCII only (no spaces, no invisible or non-ASCII characters), a sane length, and a
+ * Claude or OpenAI key by its prefix (free-own-key spec §3.2). The provider's own check happens in Test key.
  */
-const looksLikeKey = (key: string) => /^[\x21-\x7e]{1,300}$/.test(key);
-const NOT_A_KEY = "That doesn't look like an API key.";
+const looksLikeKey = (key: string) => /^[\x21-\x7e]{1,300}$/.test(key) && providerOf(key) !== null;
 const OPTIONS_ROUTE = /^#\/[a-z-]*$/;
 /** Requests only LingoFlix's own pages (options, popup) may send: the API key ones, and Send a test. */
 const PAGE_ONLY = new Set(['api-key:set', 'api-key:remove', 'api-key:test', 'reminder:test']);
@@ -48,13 +48,16 @@ export interface MessageContext {
 export function createMessageHandler(deps: MessageHandlerDeps): (message: unknown, context: MessageContext) => Promise<unknown> {
   async function testKey(key: string | null): Promise<BackgroundResponse<'api-key:test'>> {
     if (!key) return { result: 'rejected', message: 'No API key to test.' };
+    const provider = providerOf(key);
+    if (!provider) return { result: 'rejected', message: NOT_A_KEY }; // saved before Save checked the provider
+    const { company } = PROVIDERS[provider];
     try {
       await deps.createClient(key).checkKey();
       return { result: 'valid', message: 'Your key works.' };
     } catch (err) {
       const { code, message } = toExplainError(err);
-      if (code === 'bad-key') return { result: 'rejected', message: 'Anthropic rejected this key.' };
-      if (code === 'network') return { result: 'network', message: "Couldn't reach Anthropic. Check your connection." };
+      if (code === 'bad-key') return { result: 'rejected', message: `${company} rejected this key.` };
+      if (code === 'network') return { result: 'network', message: `Couldn't reach ${company}. Check your connection.` };
       return { result: 'error', message };
     }
   }
@@ -93,7 +96,11 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
     switch (type) {
       case 'api-key:status': {
         const key = await deps.getApiKey();
-        return { set: key !== null, masked: key ? maskApiKey(key) : null } satisfies BackgroundResponse<'api-key:status'>;
+        return {
+          set: key !== null,
+          masked: key ? maskApiKey(key) : null,
+          provider: key ? providerOf(key) : null,
+        } satisfies BackgroundResponse<'api-key:status'>;
       }
       case 'api-key:set': {
         const key = typeof m.key === 'string' ? m.key.trim() : '';
