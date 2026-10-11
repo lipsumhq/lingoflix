@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { GoodbyeForm } from "./GoodbyeForm";
 
 export const metadata: Metadata = { title: "Sorry to see you go" };
@@ -14,13 +13,6 @@ export default function GoodbyePage() {
       <div className="mt-8">
         <GoodbyeForm />
       </div>
-
-      <p className="mt-10">
-        {"Uninstalling LingoFlix doesn't cancel Premium. "}
-        <Link href="/account" className="font-bold underline">
-          Manage or cancel it from your account.
-        </Link>
-      </p>
     </div>
   );
 }

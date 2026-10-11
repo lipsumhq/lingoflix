@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import type { Database } from "@/db/types";
 
 /** Spec §5.4: the uninstall page's one optional question. */
@@ -6,7 +6,7 @@ export const GOODBYE_REASONS = ["too-expensive", "not-using", "missing-feature",
 export type GoodbyeReason = (typeof GOODBYE_REASONS)[number];
 
 export const GOODBYE_REASON_LABELS: Record<GoodbyeReason, string> = {
-  "too-expensive": "It costs too much",
+  "too-expensive": "The AI costs too much on my key",
   "not-using": "I don't use it enough",
   "missing-feature": "It's missing something I need",
   "not-working": "It didn't work well",
@@ -14,6 +14,8 @@ export const GOODBYE_REASON_LABELS: Record<GoodbyeReason, string> = {
 };
 
 export const GOODBYE_COMMENT_MAX = 500;
+/** At most this many answers are stored per hour, in total (free-own-key spec §5.4). */
+export const GOODBYE_ANSWERS_PER_HOUR = 100;
 /** Request bodies larger than this are rejected before they are parsed. */
 export const GOODBYE_BODY_MAX_BYTES = 4096;
 
@@ -50,8 +52,9 @@ const badRequest = () => Response.json({ error: "bad-request" }, { status: 400 }
 
 /**
  * POST /api/goodbye (spec §5.4). No sign-in. Stores only the reason, the comment and the time:
- * never a user, an IP address or request headers. `openDb` is called per request, so importing
- * the route needs no environment.
+ * never a user, an IP address or request headers. Past GOODBYE_ANSWERS_PER_HOUR answers in the last hour it
+ * stores nothing but answers the same, so the page still says thanks. `openDb` is called per request, so
+ * importing the route needs no environment.
  */
 export function createGoodbyeHandler(openDb: () => Kysely<Database>): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -75,9 +78,24 @@ export function createGoodbyeHandler(openDb: () => Kysely<Database>): (request: 
     const feedback = parseGoodbye(body);
     if (!feedback) return badRequest();
 
-    await openDb()
+    // One statement counts the last hour's answers and inserts only below the cap.
+    const db = openDb();
+    await db
       .insertInto("uninstall_feedback")
-      .values({ reason: feedback.reason, comment: feedback.comment })
+      .columns(["reason", "comment"])
+      .expression(
+        db
+          .selectNoFrom((eb) => [eb.val(feedback.reason).as("reason"), eb.val(feedback.comment).as("comment")])
+          .where(
+            (eb) =>
+              eb
+                .selectFrom("uninstall_feedback")
+                .select(eb.fn.countAll().as("recent"))
+                .where("created_at", ">", sql<Date>`now() - interval '1 hour'`),
+            "<",
+            GOODBYE_ANSWERS_PER_HOUR,
+          ),
+      )
       .execute();
     return Response.json({ ok: true }, { status: 201 });
   };

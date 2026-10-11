@@ -1,7 +1,8 @@
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "@/db/types";
 import {
+  GOODBYE_ANSWERS_PER_HOUR,
   GOODBYE_COMMENT_MAX,
   GOODBYE_REASONS,
   GOODBYE_REASON_LABELS,
@@ -51,7 +52,7 @@ describe("parseGoodbye", () => {
 
   it("has a label for every reason", () => {
     expect(GOODBYE_REASONS.map((reason) => GOODBYE_REASON_LABELS[reason])).toEqual([
-      "It costs too much",
+      "The AI costs too much on my key",
       "I don't use it enough",
       "It's missing something I need",
       "It didn't work well",
@@ -83,6 +84,11 @@ describe("POST /api/goodbye", () => {
       }),
     );
   const stored = () => db.selectFrom("uninstall_feedback").selectAll().execute();
+  /** Puts `count` answers sent `minutesAgo` minutes ago straight into the table. */
+  const seed = (count: number, minutesAgo: number) =>
+    sql`insert into uninstall_feedback (reason, created_at) select 'other', now() - make_interval(mins => ${minutesAgo}) from generate_series(1, ${count})`.execute(
+      db,
+    );
 
   it("stores the reason, the comment and the time, and nothing else", async () => {
     const before = Date.now();
@@ -116,6 +122,42 @@ describe("POST /api/goodbye", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "bad-request" });
     expect(await stored()).toEqual([]);
+  });
+
+  it("stores at most 100 answers an hour", () => {
+    expect(GOODBYE_ANSWERS_PER_HOUR).toBe(100);
+  });
+
+  it("stores the 100th answer of the hour", async () => {
+    await seed(99, 0);
+    expect((await post(JSON.stringify({ reason: "other" }))).status).toBe(201);
+    expect(await stored()).toHaveLength(100);
+  });
+
+  it("past 100 answers in the last hour, says thanks and stores nothing", async () => {
+    await seed(100, 0);
+    const res = await post(JSON.stringify({ reason: "not-working", comment: "One too many" }));
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ ok: true });
+    const rows = await stored();
+    expect(rows).toHaveLength(100);
+    expect(rows.map((row) => row.comment)).not.toContain("One too many");
+  });
+
+  it("doesn't count answers older than an hour", async () => {
+    await seed(100, 61);
+    expect((await post(JSON.stringify({ reason: "other" }))).status).toBe(201);
+    expect(await stored()).toHaveLength(101);
+  });
+
+  it("answers the 101st exactly as the 100th, which it stored", async () => {
+    await seed(99, 0);
+    const storedRes = await post(JSON.stringify({ reason: "other" }));
+    const cappedRes = await post(JSON.stringify({ reason: "other" }));
+    expect(await stored()).toHaveLength(100);
+    expect(cappedRes.status).toBe(storedRes.status);
+    expect([...cappedRes.headers]).toEqual([...storedRes.headers]);
+    expect(await cappedRes.text()).toBe(await storedRes.text());
   });
 });
 

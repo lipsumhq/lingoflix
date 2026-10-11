@@ -35,7 +35,7 @@ describe("GoodbyeForm", () => {
 
   it("moves focus to the thank-you message, which screen readers then read out", async () => {
     render(<GoodbyeForm submit={vi.fn(async () => true)} />);
-    choose("It costs too much");
+    choose("The AI costs too much on my key");
     send();
     const thanks = await screen.findByText("Thanks for telling us.");
     await waitFor(() => expect(document.activeElement).toBe(thanks));
@@ -62,7 +62,7 @@ describe("GoodbyeForm", () => {
   ])("says so when %s, and leaves focus on the Send button to try again", async (_label, makeFetch) => {
     vi.stubGlobal("fetch", makeFetch());
     render(<GoodbyeForm />);
-    choose("It costs too much");
+    choose("The AI costs too much on my key");
     send();
     expect(await screen.findByText("Couldn't send that. You can close this page.")).toBeTruthy();
     const button = screen.getByRole("button", { name: "Send" }) as HTMLButtonElement;
@@ -80,13 +80,14 @@ describe("GoodbyeForm", () => {
 });
 
 describe("the goodbye page", () => {
-  it("asks why, and says that uninstalling does not cancel Premium", () => {
+  it("asks why, with nothing about Premium or an account", () => {
     render(<GoodbyePage />);
     expect(screen.getByRole("heading", { level: 1, name: "Sorry to see you go" })).toBeTruthy();
     expect(screen.getAllByRole("radio")).toHaveLength(5);
-    expect(screen.getByText(/Uninstalling LingoFlix doesn't cancel Premium\./)).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "Manage or cancel it from your account." }).getAttribute("href"),
-    ).toBe("/account");
+    expect((screen.getByRole("radio", { name: "The AI costs too much on my key" }) as HTMLInputElement).value).toBe(
+      "too-expensive",
+    );
+    expect(screen.queryAllByRole("link")).toEqual([]);
+    expect(document.body.textContent).not.toMatch(/Premium|account/i);
   });
 });
