@@ -123,6 +123,11 @@ describe('StudyLogDetail', () => {
     expect(within(detail).getByText(`Saved ${new Date(ITEM.savedAt).toLocaleString()}`)).toBeTruthy();
   });
 
+  it('takes the focus when it opens', () => {
+    renderDetail();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'call it a night' }));
+  });
+
   it('does not highlight a whole-line item', () => {
     const { container } = renderDetail({ type: 'line', text: ITEM.line, meaning: '' });
     expect(container.querySelector('blockquote')?.textContent).toBe(ITEM.line);

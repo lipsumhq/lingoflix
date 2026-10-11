@@ -14,7 +14,14 @@ export function ConfirmDialog({ title, body, confirmLabel = 'Delete', onConfirm,
   const titleId = useId();
   const bodyId = useId();
   const cancel = useRef<HTMLButtonElement>(null);
-  useEffect(() => cancel.current?.focus(), []);
+  useEffect(() => {
+    // The focus goes back where it was (e.g. the button that opened the dialog) when the dialog closes.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    cancel.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
 
   return (
     <div

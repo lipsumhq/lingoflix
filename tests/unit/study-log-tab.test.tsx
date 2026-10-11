@@ -80,6 +80,9 @@ async function rowButton(text: string): Promise<HTMLElement> {
   return button;
 }
 
+const TWO_COLUMNS = 'md:grid-cols-[220px_minmax(0,1fr)]';
+const THREE_COLUMNS = 'md:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)]';
+
 /** happy-dom is 1024 px wide; tests pick the layout explicitly. */
 function layout(wide: boolean) {
   vi.spyOn(window, 'matchMedia').mockImplementation(
@@ -336,5 +339,96 @@ describe('Study Log detail view', () => {
     await waitFor(async () => expect(await rowTexts()).toContain('gonna'));
     expect(screen.queryByRole('region', { name: 'gonna' })).toBeNull();
     expect((await rowButton('gonna')).getAttribute('aria-current')).toBeNull();
+  });
+
+  it('uses three columns only while the detail is open on a wide window', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    const classes = async () => (await tree()).parentElement!.className.split(/\s+/);
+    expect(await classes()).toContain(TWO_COLUMNS);
+    expect(await classes()).not.toContain(THREE_COLUMNS);
+    fireEvent.click(await rowButton('gonna'));
+    await screen.findByRole('region', { name: 'gonna' });
+    expect(await classes()).toContain(THREE_COLUMNS);
+    expect(await classes()).not.toContain(TWO_COLUMNS);
+    fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
+    await waitFor(async () => expect(await classes()).toContain(TWO_COLUMNS));
+    expect(await classes()).not.toContain(THREE_COLUMNS);
+  });
+
+  it('keeps two columns on a narrow window, the detail in place of the list', async () => {
+    layout(false);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('gonna'));
+    await screen.findByRole('region', { name: 'gonna' });
+    const classes = (await tree()).parentElement!.className.split(/\s+/);
+    expect(classes).toContain(TWO_COLUMNS);
+    expect(classes).not.toContain(THREE_COLUMNS);
+  });
+
+  it('narrow window: opening a row focuses the detail heading; Back gives the focus back to that row', async () => {
+    layout(false);
+    await seed();
+    render(<StudyLogTab />);
+    const pilot = await rowButton('Pilot');
+    pilot.focus();
+    fireEvent.click(pilot);
+    const detail = await screen.findByRole('region', { name: 'Pilot' });
+    await waitFor(() => expect(document.activeElement).toBe(within(detail).getByRole('heading', { name: 'Pilot' })));
+    const back = screen.getByRole('button', { name: 'Back' });
+    back.focus();
+    fireEvent.click(back);
+    await waitFor(async () => expect(document.activeElement).toBe(await rowButton('Pilot')));
+  });
+
+  it('wide window: Close details and Escape give the focus back to the row of the item that was open', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('call it a night'));
+    const close = within(await screen.findByRole('region', { name: 'call it a night' })).getByRole('button', { name: 'Close details' });
+    close.focus();
+    fireEvent.click(close);
+    await waitFor(async () => expect(document.activeElement).toBe(await rowButton('call it a night')));
+
+    fireEvent.click(await rowButton('call it a night'));
+    const heading = within(await screen.findByRole('region', { name: 'call it a night' })).getByRole('heading', { name: 'call it a night' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    fireEvent.keyDown(heading, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'call it a night' })).toBeNull());
+    expect(document.activeElement).toBe(await rowButton('call it a night'));
+  });
+
+  it('Escape typed in the search box closes the detail and leaves the focus in the search box', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('gonna'));
+    await screen.findByRole('region', { name: 'gonna' });
+    const search = screen.getByRole('searchbox', { name: 'Search saved items' });
+    search.focus();
+    fireEvent.keyDown(search, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'gonna' })).toBeNull());
+    expect(document.activeElement).toBe(search);
+  });
+
+  it('Delete: Cancel gives the focus back to Delete; after deleting, the focus goes to the list heading', async () => {
+    layout(true);
+    await seed();
+    render(<StudyLogTab />);
+    fireEvent.click(await rowButton('gonna'));
+    const remove = within(await screen.findByRole('region', { name: 'gonna' })).getByRole('button', { name: 'Delete' });
+    remove.focus();
+    fireEvent.click(remove);
+    expect(document.activeElement).toBe(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(remove);
+
+    fireEvent.click(remove);
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'gonna' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'All items' })));
   });
 });

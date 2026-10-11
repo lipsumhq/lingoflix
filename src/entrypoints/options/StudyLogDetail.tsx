@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronDown, Play, Trash2, X } from 'lucide-react';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Markdown } from '@/components/Markdown';
 import { buttonSecondary, card, focusRing } from '@/components/styles';
 import { formatTimestamp } from '@/lib/study-log/format';
@@ -73,6 +73,7 @@ function Collapsible({ label, defaultOpen, children }: { label: string; defaultO
 /** v2 spec §6.2: one saved item with everything known about where it came from. */
 export function StudyLogDetail({ item, narrow, onClose, onDelete, onOpenAtMoment, loadExplanation = getExplanation }: StudyLogDetailProps) {
   const headingId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
   // undefined while loading; null when there is none.
   const [explanation, setExplanation] = useState<Explanation | null | undefined>(undefined);
 
@@ -88,6 +89,9 @@ export function StudyLogDetail({ item, narrow, onClose, onDelete, onOpenAtMoment
       active = false;
     };
   }, [item.explanationId, loadExplanation]);
+
+  // Keyboard and screen reader users land on the item when the detail opens (it may have replaced the list).
+  useEffect(() => heading.current?.focus(), []);
 
   const highlight = item.type !== 'line';
 
@@ -119,7 +123,7 @@ export function StudyLogDetail({ item, narrow, onClose, onDelete, onOpenAtMoment
         </div>
       )}
 
-      <h2 id={headingId} className="text-[22px] leading-tight font-black whitespace-pre-line">
+      <h2 id={headingId} ref={heading} tabIndex={-1} className="text-[22px] leading-tight font-black whitespace-pre-line outline-none">
         {item.text}
       </h2>
       {item.meaning && <p className="text-[15px] font-bold text-mute">{item.meaning}</p>}

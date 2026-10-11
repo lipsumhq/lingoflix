@@ -52,7 +52,8 @@ export function StudyLogItems({
     <section aria-labelledby="study-log-items-heading" className="flex min-w-0 flex-col gap-3">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 id="study-log-items-heading" className="text-[19px] font-black">
+          {/* tabIndex -1: the focus lands here when the open item's detail closes and its row is gone. */}
+          <h2 id="study-log-items-heading" tabIndex={-1} className="text-[19px] font-black outline-none">
             {heading}
           </h2>
           <p className="text-sm font-semibold text-mute">{subheading}</p>
@@ -79,6 +80,7 @@ export function StudyLogItems({
               <li key={item.id}>
                 <button
                   type="button"
+                  data-item-id={item.id}
                   aria-current={active ? 'true' : undefined}
                   onClick={() => onSelectItem(item)}
                   className={`flex w-full flex-col gap-1 rounded-[18px] border-2 px-4 py-3 text-left ${focusRing} ${

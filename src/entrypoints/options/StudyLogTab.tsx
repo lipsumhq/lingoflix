@@ -1,6 +1,6 @@
 import { browser } from '#imports';
 import { BookOpen, RotateCcw } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { buttonSecondary, card, iconTile } from '@/components/styles';
 import { useWideLayout } from '@/hooks/useWideLayout';
@@ -99,6 +99,8 @@ export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingDelete | null>(null);
   const wide = useWideLayout();
+  const grid = useRef<HTMLDivElement>(null);
+  const lastOpenId = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -139,6 +141,22 @@ export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [selectedItem, pending]);
+
+  // The detail takes the focus when it opens (StudyLogDetail). When it closes and the focus went with it (Back,
+  // Close details, Escape, its item deleted), the focus goes back to that item's row, or to the list heading when
+  // the row is gone or filtered out. Focus that is still somewhere (the tree, the search box) stays there.
+  const openId = selectedItem?.id ?? null;
+  useLayoutEffect(() => {
+    const closedId = lastOpenId.current;
+    lastOpenId.current = openId;
+    if (closedId === null || openId !== null) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    const root = grid.current;
+    if (!root) return;
+    const row = [...root.querySelectorAll<HTMLElement>('[data-item-id]')].find((el) => el.dataset.itemId === closedId);
+    (row ?? root.querySelector<HTMLElement>('#study-log-items-heading') ?? root.querySelector<HTMLElement>('nav [aria-current="true"]'))?.focus();
+  }, [openId]);
 
   const confirmDelete = (title: string, body: string, ids: string[]) => setPending({ title, body, run: () => deleteItems(ids) });
   const clearFilters = () => {
@@ -207,9 +225,10 @@ export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (
         </section>
       ) : (
         <div
-          className={`grid gap-5 md:grid-cols-[220px_minmax(0,1fr)] ${
-            detail && wide ? 'min-[1100px]:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)]' : ''
-          }`}
+          ref={grid}
+          // One template at a time: `wide` already is the 1100 px query, and two breakpoint variants would fight
+          // over source order in the built CSS (Tailwind puts `min-[1100px]:` before `md:`, so `md:` would win).
+          className={`grid gap-5 ${detail && wide ? 'md:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)]' : 'md:grid-cols-[220px_minmax(0,1fr)]'}`}
         >
           <StudyLogTree
             tree={tree}
