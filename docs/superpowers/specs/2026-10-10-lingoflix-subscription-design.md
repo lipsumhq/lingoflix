@@ -1,5 +1,7 @@
 # LingoFlix Premium: subscription, server and AI through LingoFlix
 
+Abandoned 2026-10-11: LingoFlix stays free with the learner's own key. See docs/superpowers/specs/2026-10-11-lingoflix-free-own-key-design.md.
+
 Date: 2026-10-10 · Status: approved in conversation, pending written review
 Builds on: `docs/superpowers/specs/2026-10-09-lingoflix-design.md` (main spec),
 `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2) and

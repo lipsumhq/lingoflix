@@ -33,7 +33,7 @@ Not affiliated with or endorsed by Netflix.
 | Folder | What it is |
 |---|---|
 | [`lingoflix-extension/`](./lingoflix-extension) | The Chrome extension (WXT, React, TypeScript) |
-| [`lingoflix-server/`](./lingoflix-server) | The website and API (Next.js): sign-in, Premium, the AI endpoint |
+| [`lingoflix-server/`](./lingoflix-server) | The website (Next.js): the landing page, the install and uninstall pages, privacy and terms |
 | [`docs/`](./docs) | Design specs and implementation plans |
 
 ## Development

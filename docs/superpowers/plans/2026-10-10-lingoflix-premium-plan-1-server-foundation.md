@@ -1,5 +1,7 @@
 # LingoFlix Premium Plan 1: Server Foundation Implementation Plan
 
+Abandoned 2026-10-11: LingoFlix stays free with the learner's own key. See docs/superpowers/specs/2026-10-11-lingoflix-free-own-key-design.md.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Create `lingoflix-server/`, the LingoFlix website and API: a Next.js app with sign-in (Google and emailed links), its Postgres schema, and the public pages (`/`, `/welcome`, `/sign-in`, `/account`, `/upgrade`, `/connect`, `/goodbye`, `/privacy`, `/terms`), ready to deploy on Vercel with Neon.
