@@ -1,12 +1,11 @@
 import { AddToChrome } from "@/components/AddToChrome";
-import { Pricing } from "@/components/Pricing";
 import { secondaryButton } from "@/components/styles";
-import { chromeStoreUrl } from "@/lib/site";
+import { DONATION_LINKS, chromeStoreUrl } from "@/lib/site";
 
 const FEATURES = [
   {
     title: "Explain any line",
-    body: "Hover a subtitle or press E. LingoFlix explains what it means in this scene, the key expressions, and how to use them.",
+    body: "Hover a subtitle or press E. LingoFlix explains what it means in this scene, the key expressions, and how to use them, with your own Claude or OpenAI key.",
   },
   {
     title: "Save what you learn",
@@ -26,18 +25,6 @@ const FEATURES = [
   },
 ];
 
-/** Spec §3, row by row: [feature, Free, Premium]. */
-const PLAN_ROWS: [string, string, string][] = [
-  ["Shortcuts, line navigation and the subtitle toggle", "Yes", "Yes"],
-  ["Voice shadowing (coming soon)", "Yes", "Yes"],
-  ["Study reminders", "Yes", "Yes"],
-  ["Study Log: browse, search, open and delete", "Yes", "Yes"],
-  ["Save this line", "Yes", "Yes"],
-  ["Full backup and import", "Yes", "Yes"],
-  ["AI explanations, follow-ups and save suggestions", "No", "Yes"],
-  ["Anki and CSV export", "No", "Yes"],
-];
-
 export default function HomePage() {
   return (
     <div className="flex flex-col gap-14">
@@ -46,12 +33,7 @@ export default function HomePage() {
         <p className="max-w-2xl text-lg text-mute">
           LingoFlix is a Chrome extension for learning languages with the shows you already watch.
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <AddToChrome storeUrl={chromeStoreUrl()} />
-          <a href="#pricing" className={secondaryButton}>
-            See pricing
-          </a>
-        </div>
+        <AddToChrome storeUrl={chromeStoreUrl()} />
       </section>
 
       <section aria-labelledby="features-heading">
@@ -68,40 +50,33 @@ export default function HomePage() {
         </ul>
       </section>
 
-      <section aria-labelledby="plans-heading">
-        <h2 id="plans-heading" className="text-2xl font-black">
-          Free and Premium
+      <section
+        aria-labelledby="free-heading"
+        className="rounded-3xl border-2 border-tint-line bg-tint px-6 py-8 sm:px-10"
+      >
+        <h2 id="free-heading" className="text-2xl font-black">
+          Free, with your own key
         </h2>
-        <table className="mt-5 w-full border-collapse text-left">
-          <caption className="sr-only">Free and Premium</caption>
-          <thead>
-            <tr className="border-b-2 border-line">
-              <th scope="col" className="py-2 pr-4">
-                Feature
-              </th>
-              <th scope="col" className="py-2 pr-4">
-                Free
-              </th>
-              <th scope="col" className="py-2">
-                Premium
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {PLAN_ROWS.map(([feature, free, premium]) => (
-              <tr key={feature} className="border-b border-line">
-                <th scope="row" className="py-2 pr-4 font-semibold">
-                  {feature}
-                </th>
-                <td className="py-2 pr-4">{free}</td>
-                <td className="py-2">{premium}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <p className="mt-2 max-w-2xl text-lg">
+          {
+            "LingoFlix is free. Explanations use your own Claude or OpenAI API key, so they're billed by Anthropic or OpenAI at their prices. Everything else costs nothing."
+          }
+        </p>
       </section>
 
-      <Pricing />
+      <section id="support" aria-labelledby="support-heading">
+        <h2 id="support-heading" className="text-2xl font-black">
+          Support LingoFlix
+        </h2>
+        <p className="mt-2 text-mute">If LingoFlix helps you learn, you can support it.</p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          {DONATION_LINKS.map((link) => (
+            <a key={link.id} href={link.url} className={secondaryButton}>
+              {link.label}
+            </a>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

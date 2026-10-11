@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DONATION_LINKS,
   PRICE_MONTHLY,
   PRICE_YEARLY,
   SITE_NAME,
@@ -19,6 +20,13 @@ describe("site constants", () => {
     expect(PRICE_MONTHLY).toBe("$7.99");
     expect(PRICE_YEARLY).toBe("$59.99");
     expect(TRIAL_DAYS).toBe(7);
+  });
+
+  it("links the same two donation pages as the extension", () => {
+    expect(DONATION_LINKS).toEqual([
+      { id: "buymeacoffee", label: "Buy Me a Coffee", url: "https://buymeacoffee.com/jaycho1214" },
+      { id: "github-sponsors", label: "GitHub Sponsors", url: "https://github.com/sponsors/jaycho1214" },
+    ]);
   });
 });
 

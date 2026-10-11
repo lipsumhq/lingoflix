@@ -10,11 +10,8 @@ export function SiteHeader() {
           LingoFlix
         </Link>
         <div className="flex items-center gap-5 text-sm font-extrabold">
-          <Link href="/#pricing" className="hover:underline">
-            Pricing
-          </Link>
-          <Link href="/account" className="hover:underline">
-            Account
+          <Link href="/#support" className="hover:underline">
+            Support
           </Link>
         </div>
       </nav>

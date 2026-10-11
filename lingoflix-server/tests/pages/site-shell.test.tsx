@@ -2,7 +2,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { AddToChrome } from "@/components/AddToChrome";
-import { Pricing } from "@/components/Pricing";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 
@@ -11,45 +10,34 @@ afterEach(cleanup);
 const EM_DASH = /\u2014/;
 const STORE_URL = "https://chromewebstore.google.com/detail/lingoflix/abcdefghijklmnopabcdefghijklmnop";
 
+/** Every link in `container` as [text, href], in page order. */
+const linksIn = (container: HTMLElement) =>
+  within(container)
+    .getAllByRole("link")
+    .map((link) => [link.textContent, link.getAttribute("href")]);
+
 describe("SiteHeader", () => {
-  it("links home, pricing and the account page", () => {
+  it("links home and the Support section, and nothing else", () => {
     render(<SiteHeader />);
-    const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getByRole("link", { name: "LingoFlix" }).getAttribute("href")).toBe("/");
-    expect(within(nav).getByRole("link", { name: "Pricing" }).getAttribute("href")).toBe("/#pricing");
-    expect(within(nav).getByRole("link", { name: "Account" }).getAttribute("href")).toBe("/account");
+    expect(linksIn(screen.getByRole("navigation", { name: "Main" }))).toEqual([
+      ["LingoFlix", "/"],
+      ["Support", "/#support"],
+    ]);
   });
 });
 
 describe("SiteFooter", () => {
-  it("has the legal links, the Netflix disclaimer and the copyright line", () => {
+  it("links privacy, terms, the support email and both donation pages, with the disclaimer and copyright", () => {
     render(<SiteFooter />);
-    const nav = screen.getByRole("navigation", { name: "Footer" });
-    expect(within(nav).getByRole("link", { name: "Privacy" }).getAttribute("href")).toBe("/privacy");
-    expect(within(nav).getByRole("link", { name: "Terms" }).getAttribute("href")).toBe("/terms");
-    expect(within(nav).getByRole("link", { name: "Account" }).getAttribute("href")).toBe("/account");
+    expect(linksIn(screen.getByRole("navigation", { name: "Footer" }))).toEqual([
+      ["Privacy", "/privacy"],
+      ["Terms", "/terms"],
+      ["support@lingoflix.lipsum.fun", "mailto:support@lingoflix.lipsum.fun"],
+      ["Buy Me a Coffee", "https://buymeacoffee.com/jaycho1214"],
+      ["GitHub Sponsors", "https://github.com/sponsors/jaycho1214"],
+    ]);
     expect(screen.getByText("Not affiliated with or endorsed by Netflix.")).toBeTruthy();
     expect(screen.getByText("© 2026 LingoFlix")).toBeTruthy();
-  });
-});
-
-describe("Pricing", () => {
-  it("shows both prices, the trial, what Premium includes and the trial button", () => {
-    render(<Pricing />);
-    const section = screen.getByRole("region", { name: "LingoFlix Premium" });
-    expect(section.id).toBe("pricing");
-    expect(within(section).getByText("7 days free, then $7.99/month or $59.99/year.")).toBeTruthy();
-    for (const item of [
-      "Hover any line for an explanation that fits the scene",
-      "Ask follow-up questions about any line",
-      "Save suggestions for words, phrases, idioms and whole lines",
-      "Anki and CSV export of your Study Log",
-    ]) {
-      expect(within(section).getByText(item)).toBeTruthy();
-    }
-    const trial = within(section).getByRole("link", { name: "Start your 7-day free trial" });
-    expect(trial.getAttribute("href")).toBe("/upgrade");
-    expect(within(section).getByText("Cancel any time before the trial ends and you won't be charged.")).toBeTruthy();
   });
 });
 
@@ -71,7 +59,6 @@ describe("copy", () => {
     render(
       <>
         <SiteHeader />
-        <Pricing />
         <AddToChrome storeUrl={null} />
         <SiteFooter />
       </>,

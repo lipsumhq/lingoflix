@@ -6,6 +6,12 @@ export const PRICE_MONTHLY = "$7.99";
 export const PRICE_YEARLY = "$59.99";
 export const TRIAL_DAYS = 7;
 
+/** Where to donate: the same two pages as the extension's `DONATION_LINKS` (lingoflix-extension/src/lib/config.ts). */
+export const DONATION_LINKS = [
+  { id: "buymeacoffee", label: "Buy Me a Coffee", url: "https://buymeacoffee.com/jaycho1214" },
+  { id: "github-sponsors", label: "GitHub Sponsors", url: "https://github.com/sponsors/jaycho1214" },
+] as const;
+
 const STORE_PREFIX = "https://chromewebstore.google.com/";
 
 /**

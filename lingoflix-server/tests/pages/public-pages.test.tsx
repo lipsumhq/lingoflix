@@ -11,10 +11,11 @@ afterEach(cleanup);
 const EM_DASH = /\u2014/;
 const STORE_URL = "https://chromewebstore.google.com/detail/lingoflix/abcdefghijklmnopabcdefghijklmnop";
 
-const cellsOf = (rowName: RegExp) =>
-  within(screen.getByRole("row", { name: rowName }))
-    .getAllByRole("cell")
-    .map((cell) => cell.textContent);
+/** Every link in `container` as [text, href], in page order. */
+const linksIn = (container: HTMLElement) =>
+  within(container)
+    .getAllByRole("link")
+    .map((link) => [link.textContent, link.getAttribute("href")]);
 
 describe("home page", () => {
   it("leads with what LingoFlix does", () => {
@@ -23,25 +24,34 @@ describe("home page", () => {
     for (const feature of ["Explain any line", "Save what you learn", "Line by line", "Voice shadowing", "Study reminders"]) {
       expect(screen.getByRole("heading", { level: 3, name: feature })).toBeTruthy();
     }
-    expect(screen.getByRole("link", { name: "See pricing" }).getAttribute("href")).toBe("#pricing");
+    expect(
+      screen.getByText(
+        "Hover a subtitle or press E. LingoFlix explains what it means in this scene, the key expressions, and how to use them, with your own Claude or OpenAI key.",
+      ),
+    ).toBeTruthy();
   });
 
-  it("compares Free and Premium as spec §3 does", () => {
+  it("says it is free with your own key, with no plans or prices", () => {
     render(<HomePage />);
-    expect(screen.getByRole("table", { name: "Free and Premium" })).toBeTruthy();
-    expect(cellsOf(/Shortcuts, line navigation and the subtitle toggle/)).toEqual(["Yes", "Yes"]);
-    expect(cellsOf(/Voice shadowing/)).toEqual(["Yes", "Yes"]);
-    expect(cellsOf(/Study reminders/)).toEqual(["Yes", "Yes"]);
-    expect(cellsOf(/Study Log: browse, search, open and delete/)).toEqual(["Yes", "Yes"]);
-    expect(cellsOf(/Save this line/)).toEqual(["Yes", "Yes"]);
-    expect(cellsOf(/Full backup and import/)).toEqual(["Yes", "Yes"]);
-    expect(cellsOf(/AI explanations, follow-ups and save suggestions/)).toEqual(["No", "Yes"]);
-    expect(cellsOf(/Anki and CSV export/)).toEqual(["No", "Yes"]);
+    const free = screen.getByRole("region", { name: "Free, with your own key" });
+    expect(
+      within(free).getByText(
+        "LingoFlix is free. Explanations use your own Claude or OpenAI API key, so they're billed by Anthropic or OpenAI at their prices. Everything else costs nothing.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Premium|pricing|trial|\$/i);
   });
 
-  it("includes the pricing section", () => {
+  it("asks for support, with both donation links, in the section the header links to", () => {
     render(<HomePage />);
-    expect(screen.getByRole("region", { name: "LingoFlix Premium" })).toBeTruthy();
+    const support = screen.getByRole("region", { name: "Support LingoFlix" });
+    expect(support.id).toBe("support");
+    expect(within(support).getByText("If LingoFlix helps you learn, you can support it.")).toBeTruthy();
+    expect(linksIn(support)).toEqual([
+      ["Buy Me a Coffee", "https://buymeacoffee.com/jaycho1214"],
+      ["GitHub Sponsors", "https://github.com/sponsors/jaycho1214"],
+    ]);
   });
 
   it("shows Add to Chrome when the store listing URL is set", () => {
