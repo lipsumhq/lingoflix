@@ -85,18 +85,29 @@ describe('explanation card', () => {
     expect(screen.queryByRole('region', { name: 'Save' })).toBeNull();
   });
 
-  it('error cards follow spec §7.4', () => {
-    const noKey = renderCard({ status: 'error', response: '', explanation: null, error: { code: 'no-key', message: 'Add your Claude API key' } });
+  it('error cards follow free-own-key spec §4.6', () => {
+    const error = (code: NonNullable<CardState['error']>['code'], message: string, provider: 'claude' | 'openai' | null = 'claude') =>
+      renderCard({ status: 'error', response: '', explanation: null, error: { code, message, provider } });
+    const noKey = error('no-key', 'Add your API key', null);
     fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
     expect(noKey.onOpenSettings).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
     cleanup();
-    const offline = renderCard({ status: 'error', response: '', explanation: null, error: { code: 'network', message: "Couldn't reach Claude" } });
+    error('bad-key', 'Your OpenAI key was rejected', 'openai');
+    expect(screen.getByRole('alert').textContent).toBe('Your OpenAI key was rejected');
+    expect(screen.getByRole('button', { name: 'Open Settings' })).toBeTruthy();
+    cleanup();
+    const offline = error('network', "Couldn't reach Claude");
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(offline.onRetry).toHaveBeenCalled();
     cleanup();
-    renderCard({ status: 'error', response: '', explanation: null, error: { code: 'api', message: 'Your credit balance is too low.' } });
-    expect(screen.getByRole('alert').textContent).toBe('Your credit balance is too low.');
+    error('busy', 'OpenAI is busy right now', 'openai');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    cleanup();
+    error('api', 'prompt is too long: 250000 tokens > 200000 maximum');
+    expect(screen.getByRole('alert').textContent).toBe('prompt is too long: 250000 tokens > 200000 maximum');
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Save' })).toBeNull();
     cleanup();
     renderCard({
@@ -104,9 +115,36 @@ describe('explanation card', () => {
       line: '',
       response: '',
       explanation: null,
-      error: { code: 'image-subs', message: "This title's subtitles can't be read as text" },
+      error: { code: 'image-subs', message: "This title's subtitles can't be read as text", provider: null },
     });
     expect(screen.getByRole('alert').textContent).toBe("This title's subtitles can't be read as text");
+  });
+
+  it("out of credit: the company's headline, a link to its billing page, and Retry", () => {
+    const anthropic = renderCard({
+      status: 'error',
+      response: '',
+      explanation: null,
+      error: { code: 'no-credit', message: 'Your Anthropic account is out of credit', provider: 'claude' },
+    });
+    expect(screen.getByRole('alert').textContent).toBe('Your Anthropic account is out of credit');
+    const link = screen.getByRole('link', { name: 'Add credit at console.anthropic.com' });
+    expect(link.getAttribute('href')).toBe('https://console.anthropic.com/settings/billing');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(anthropic.onRetry).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Open Settings' })).toBeNull();
+    cleanup();
+    renderCard({
+      status: 'error',
+      response: '',
+      explanation: null,
+      error: { code: 'no-credit', message: 'Your OpenAI account is out of credit', provider: 'openai' },
+    });
+    expect(screen.getByRole('link', { name: 'Add credit at platform.openai.com' }).getAttribute('href')).toBe(
+      'https://platform.openai.com/settings/organization/billing/overview',
+    );
   });
 
   it('follow-up: Enter sends, Shift+Enter does not', () => {

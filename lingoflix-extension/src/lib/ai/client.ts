@@ -40,8 +40,12 @@ export interface StreamResult {
 
 /** The provider-neutral client LingoFlix uses (free-own-key spec §4.1). Tests substitute a fake. */
 export interface AiClient {
-  /** Streams text deltas to `onText`; resolves with the text and tool calls; rejects with the SDK's errors. */
-  stream(params: StreamParams, onText: (delta: string) => void, signal: AbortSignal): Promise<StreamResult>;
+  /**
+   * Streams text deltas to `onText`, and calls `onActivity` on every stream event (text or not), so the caller's
+   * idle timer only fires on a silent stream (spec §4.3). Resolves with the text and tool calls; rejects with
+   * the SDK's errors.
+   */
+  stream(params: StreamParams, onText: (delta: string) => void, signal: AbortSignal, onActivity: () => void): Promise<StreamResult>;
   /** The cheapest authenticated call, the provider's model list (spec §5.8 Test key). */
   checkKey(): Promise<void>;
 }

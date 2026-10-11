@@ -18,16 +18,25 @@ vi.mock('@anthropic-ai/sdk', async (importOriginal) => {
   return { ...actual, default: FakeAnthropic };
 });
 
-/** Stands in for the SDK's MessageStream: replays text deltas, then resolves with the final content. */
+/**
+ * Stands in for the SDK's MessageStream: replays a stream event per text delta (each followed by its `text`
+ * event) between message_start and message_stop, then resolves with the final content.
+ */
 function fakeStream(deltas: string[], content: unknown[], stopReason = 'end_turn') {
-  const onText: Array<(delta: string) => void> = [];
+  const handlers = new Map<string, Array<(arg: unknown) => void>>();
+  const emit = (event: string, arg: unknown) => handlers.get(event)?.forEach((handler) => handler(arg));
   return {
-    on(event: string, handler: (delta: string) => void) {
-      if (event === 'text') onText.push(handler);
+    on(event: string, handler: (arg: never) => void) {
+      handlers.set(event, [...(handlers.get(event) ?? []), handler as (arg: unknown) => void]);
       return this;
     },
     async finalMessage() {
-      for (const delta of deltas) for (const handler of onText) handler(delta);
+      emit('streamEvent', { type: 'message_start' });
+      for (const delta of deltas) {
+        emit('streamEvent', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: delta } });
+        emit('text', delta);
+      }
+      emit('streamEvent', { type: 'message_stop' });
       return { content, stop_reason: stopReason };
     },
   };
@@ -99,6 +108,7 @@ describe('createAnthropicClient', () => {
       },
       (delta) => deltas.push(delta),
       signal,
+      () => {},
     );
     expect(deltas).toEqual(['Hel', 'lo']);
     expect(result).toEqual({ text: 'Hello', toolCalls: [{ name: 'suggest_saves', input: { items: [{ type: 'word', text: 'Hello', meaning: 'hi' }] } }] });
@@ -118,6 +128,18 @@ describe('createAnthropicClient', () => {
     expect(options).toEqual({ signal, maxRetries: 0 });
   });
 
+  it('reports every stream event as activity, not only text (free-own-key spec §4.3)', async () => {
+    sdk.stream.mockReturnValue(fakeStream(['Hel', 'lo'], [{ type: 'text', text: 'Hello' }]));
+    const activity = vi.fn();
+    await createAnthropicClient('sk-ant-test').stream(
+      { kind: 'follow-up', system: 'Rules', messages: [{ role: 'user', content: 'Q' }] },
+      () => {},
+      new AbortController().signal,
+      activity,
+    );
+    expect(activity).toHaveBeenCalledTimes(4); // message_start, two deltas, message_stop
+  });
+
   it('drops tool calls cut off by max_tokens (v2 spec §5.4: no suggestions then)', async () => {
     sdk.stream.mockReturnValue(
       fakeStream(
@@ -133,6 +155,7 @@ describe('createAnthropicClient', () => {
       { kind: 'explain', system: 'Rules', messages: [{ role: 'user', content: 'Q' }], tools: [TOOL] },
       () => {},
       new AbortController().signal,
+      () => {},
     );
     expect(result).toEqual({ text: 'Long', toolCalls: [] });
   });
@@ -143,6 +166,7 @@ describe('createAnthropicClient', () => {
       { kind: 'follow-up', system: 'Rules', messages: [{ role: 'user', content: 'Q' }] },
       () => {},
       new AbortController().signal,
+      () => {},
     );
     expect(result).toEqual({ text: 'A', toolCalls: [] });
     const [body] = sdk.stream.mock.calls.at(-1)!;
@@ -159,6 +183,7 @@ describe('createClient', () => {
       { kind: 'follow-up', system: 'Rules', messages: [{ role: 'user', content: 'Q' }] },
       () => {},
       new AbortController().signal,
+      () => {},
     );
     expect(result).toEqual({ text: 'A', toolCalls: [] });
     expect(sdk.constructed.at(-1)).toMatchObject({ apiKey: 'sk-ant-api03-key', dangerouslyAllowBrowser: true });

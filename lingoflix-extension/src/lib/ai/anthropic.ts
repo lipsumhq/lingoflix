@@ -32,7 +32,7 @@ export function createAnthropicClient(apiKey: string): AiClient {
   // Runs in the extension's service worker; the key only ever goes to api.anthropic.com.
   const client = new Anthropic({ apiKey, baseURL: CLAUDE_API_BASE_URL, dangerouslyAllowBrowser: true });
   return {
-    async stream(params, onText, signal) {
+    async stream(params, onText, signal, onActivity) {
       const tools = params.tools ?? [];
       const body: Parameters<typeof client.messages.stream>[0] = {
         model: PROVIDERS.claude.model,
@@ -53,6 +53,7 @@ export function createAnthropicClient(apiKey: string): AiClient {
       // No SDK retries: a retried 429/529 (which may wait out a long retry-after) would outlast the 30 s idle
       // timer and show "Couldn't reach Claude" instead of "Claude is busy right now" (spec §7.4).
       const stream = client.messages.stream(body, { signal, maxRetries: 0 });
+      stream.on('streamEvent', () => onActivity());
       stream.on('text', (delta) => onText(delta));
       const message = await stream.finalMessage();
       return {

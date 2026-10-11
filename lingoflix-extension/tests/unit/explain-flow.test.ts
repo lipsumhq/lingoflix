@@ -66,12 +66,21 @@ describe('streamExplanation', () => {
     expect(fake.port.disconnect).toHaveBeenCalled();
   });
 
-  it("a dropped port shows Couldn't reach Claude", () => {
+  it("a dropped port says it couldn't reach LingoFlix's background (no provider is known)", () => {
     const fake = fakePort();
     const onError = vi.fn();
     streamExplanation(() => fake.port, { type: 'start', request: {} as never }, { onDelta: vi.fn(), onDone: vi.fn(), onError });
     fake.drop();
-    expect(onError).toHaveBeenCalledWith('network', "Couldn't reach Claude");
+    expect(onError).toHaveBeenCalledWith('network', "Couldn't reach LingoFlix's background", null);
+  });
+
+  it("passes on the background's error with the provider it names", () => {
+    const fake = fakePort();
+    const onError = vi.fn();
+    streamExplanation(() => fake.port, { type: 'start', request: {} as never }, { onDelta: vi.fn(), onDone: vi.fn(), onError });
+    fake.receive({ type: 'error', code: 'no-credit', message: 'Your OpenAI account is out of credit', provider: 'openai' });
+    expect(onError).toHaveBeenCalledWith('no-credit', 'Your OpenAI account is out of credit', 'openai');
+    expect(fake.port.disconnect).toHaveBeenCalled();
   });
 
   it('cancel disconnects and silences anything that arrives later', () => {
@@ -90,7 +99,7 @@ describe('streamExplanation', () => {
       throw new Error('Extension context invalidated.');
     };
     streamExplanation(connect, { type: 'start', request: {} as never }, { onDelta: vi.fn(), onDone: vi.fn(), onError });
-    expect(onError).toHaveBeenCalledWith('network', "Couldn't reach Claude");
+    expect(onError).toHaveBeenCalledWith('network', "Couldn't reach LingoFlix's background", null);
   });
 });
 
@@ -382,18 +391,35 @@ describe('explain controller', () => {
     expect(pause.resume).toHaveBeenCalledTimes(1);
   });
 
-  it("a dropped port shows Couldn't reach Claude", async () => {
+  it("a dropped port says it couldn't reach LingoFlix's background", async () => {
     const { store, ports, explain } = setupExplain();
     explain.open('hover');
     await vi.waitFor(() => expect(ports).toHaveLength(1));
     ports[0]!.drop();
-    expect(store.get()).toMatchObject({ status: 'error', error: { code: 'network', message: "Couldn't reach Claude" } });
+    expect(store.get()).toMatchObject({
+      status: 'error',
+      error: { code: 'network', message: "Couldn't reach LingoFlix's background", provider: null },
+    });
+  });
+
+  it("an error from the background keeps its provider, for the card's billing link", async () => {
+    const { store, ports, explain } = setupExplain();
+    explain.open('hover');
+    await vi.waitFor(() => expect(ports).toHaveLength(1));
+    ports[0]!.receive({ type: 'error', code: 'no-credit', message: 'Your Anthropic account is out of credit', provider: 'claude' });
+    expect(store.get()).toMatchObject({
+      status: 'error',
+      error: { code: 'no-credit', message: 'Your Anthropic account is out of credit', provider: 'claude' },
+    });
   });
 
   it("image-based subtitles get the can't-be-read card; no line means no card", () => {
     const image = setupExplain({ imageBased: true, line: null });
     expect(image.explain.open('shortcut')).toBe(true);
-    expect(image.store.get()).toMatchObject({ status: 'error', error: { code: 'image-subs', message: "This title's subtitles can't be read as text" } });
+    expect(image.store.get()).toMatchObject({
+      status: 'error',
+      error: { code: 'image-subs', message: "This title's subtitles can't be read as text", provider: null },
+    });
     const none = setupExplain({ line: null });
     expect(none.explain.open('shortcut')).toBe(false);
     expect(none.store.get()).toBeNull();

@@ -312,7 +312,7 @@ describe('explain service: failures', () => {
     const { port, sent, send } = fakePort();
     serveExplainPort(port, deps(fakeClient().client, { getApiKey: async () => null, createClient }));
     send({ type: 'start', request: REQUEST });
-    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'no-key', message: 'Add your Claude API key' }]));
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'no-key', message: 'Add your API key', provider: null }]));
     expect(createClient).not.toHaveBeenCalled();
   });
 
@@ -321,11 +321,11 @@ describe('explain service: failures', () => {
     const { port, sent, send } = fakePort();
     serveExplainPort(port, deps(fakeClient().client, { getApiKey: async () => 'legacy-key-1234', createClient }));
     send({ type: 'start', request: REQUEST });
-    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'no-key', message: 'Add your Claude API key' }]));
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'no-key', message: 'Add your API key', provider: null }]));
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it("a background failure before the request (storage gone) shows Couldn't reach Claude", async () => {
+  it("a background failure before the key is read (storage gone) says it couldn't reach LingoFlix's background", async () => {
     const { port, sent, send } = fakePort();
     serveExplainPort(
       port,
@@ -336,7 +336,24 @@ describe('explain service: failures', () => {
       }),
     );
     send({ type: 'start', request: REQUEST });
-    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach Claude" }]));
+    await vi.waitFor(() =>
+      expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach LingoFlix's background", provider: null }]),
+    );
+  });
+
+  it("a failure after the key is read (storage gone) names the key's provider", async () => {
+    const { port, sent, send } = fakePort();
+    serveExplainPort(
+      port,
+      deps(fakeClient().client, {
+        getApiKey: async () => 'sk-proj-test-key-0000',
+        getExplanation: async () => {
+          throw new Error('storage gone');
+        },
+      }),
+    );
+    send({ type: 'follow-up', explanationId: 'e1', question: 'Why?', sections: DEFAULT_SETTINGS.cardSections, storySoFar: [] });
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach OpenAI", provider: 'openai' }]));
   });
 
   it('disconnect aborts the request and saves nothing', async () => {
@@ -357,8 +374,42 @@ describe('explain service: failures', () => {
     const { port, sent, send } = fakePort();
     serveExplainPort(port, deps(client, { idleTimeoutMs: 20 }));
     send({ type: 'start', request: REQUEST });
-    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach Claude" }]));
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach Claude", provider: 'claude' }]));
     expect(await listExplanations()).toEqual([]);
+  });
+
+  it('any stream event keeps the request alive, not only text (free-own-key spec §4.3)', async () => {
+    vi.useFakeTimers();
+    try {
+      let events: { activity(): void; finish(): void } | undefined;
+      const client: AiClient = {
+        stream: (_params, onText, signal, onActivity) =>
+          new Promise((resolve, reject) => {
+            signal.addEventListener('abort', () => reject(new Error('aborted')));
+            events = {
+              activity: onActivity,
+              finish: () => {
+                onText('ok');
+                resolve({ text: 'ok', toolCalls: [] });
+              },
+            };
+          }),
+        async checkKey() {},
+      };
+      const { port, sent, send } = fakePort();
+      serveExplainPort(port, deps(client, { idleTimeoutMs: 30_000 }));
+      send({ type: 'start', request: REQUEST });
+      await vi.waitFor(() => expect(events).toBeDefined());
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(20_000); // 60 s in all with no text, never 30 s without an event
+        events!.activity();
+      }
+      events!.finish();
+      await vi.waitFor(() => expect(sent.at(-1)?.type).toBe('done'));
+      expect(sent.filter((m) => m.type === 'error')).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('maps API errors to card states and saves nothing', async () => {
@@ -367,8 +418,22 @@ describe('explain service: failures', () => {
     const { port, sent, send } = fakePort();
     serveExplainPort(port, deps(client));
     send({ type: 'start', request: REQUEST });
-    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'bad-key', message: 'Your API key was rejected' }]));
+    await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'bad-key', message: 'Your Claude key was rejected', provider: 'claude' }]));
     expect(await listExplanations()).toEqual([]);
+  });
+
+  it("names the key's provider in errors, and its company when out of credit", async () => {
+    const outOfCredit = APIError.generate(402, { error: { type: 'billing_error', message: 'No credit' } }, 'x', new Headers());
+    for (const [apiKey, expected] of [
+      ['sk-ant-test-key-0000', { type: 'error', code: 'no-credit', message: 'Your Anthropic account is out of credit', provider: 'claude' }],
+      ['sk-proj-test-key-0000', { type: 'error', code: 'no-credit', message: 'Your OpenAI account is out of credit', provider: 'openai' }],
+    ] as const) {
+      const { client } = fakeClient({ error: outOfCredit });
+      const { port, sent, send } = fakePort();
+      serveExplainPort(port, deps(client, { getApiKey: async () => apiKey }));
+      send({ type: 'start', request: REQUEST });
+      await vi.waitFor(() => expect(sent).toEqual([expected]));
+    }
   });
 
   it('an empty answer is an error, not an explanation', async () => {
@@ -376,8 +441,17 @@ describe('explain service: failures', () => {
     const { port, sent, send } = fakePort();
     serveExplainPort(port, deps(client));
     send({ type: 'start', request: REQUEST });
-    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ type: 'error', code: 'api', message: 'Claude returned an empty answer.' }));
+    await vi.waitFor(() =>
+      expect(sent.at(-1)).toEqual({ type: 'error', code: 'api', message: 'Claude returned an empty answer.', provider: 'claude' }),
+    );
     expect(await listExplanations()).toEqual([]);
+
+    const openai = fakePort();
+    serveExplainPort(openai.port, deps(fakeClient({ deltas: [' '] }).client, { getApiKey: async () => 'sk-proj-test-key-0000' }));
+    openai.send({ type: 'start', request: REQUEST });
+    await vi.waitFor(() =>
+      expect(openai.sent.at(-1)).toEqual({ type: 'error', code: 'api', message: 'OpenAI returned an empty answer.', provider: 'openai' }),
+    );
   });
 });
 
@@ -412,12 +486,16 @@ describe('explain service: follow-ups', () => {
     const a = fakePort();
     serveExplainPort(a.port, deps(client));
     a.send({ type: 'follow-up', explanationId: 'gone', question: 'Why?', sections: DEFAULT_SETTINGS.cardSections, storySoFar: [] });
-    await vi.waitFor(() => expect(a.sent).toEqual([{ type: 'error', code: 'api', message: 'This explanation is no longer available.' }]));
+    await vi.waitFor(() =>
+      expect(a.sent).toEqual([{ type: 'error', code: 'api', message: 'This explanation is no longer available.', provider: 'claude' }]),
+    );
 
     const b = fakePort();
     serveExplainPort(b.port, deps(client));
     b.send({ type: 'start', request: { ...REQUEST, phrase: '' } });
     b.send({ type: 'start', request: REQUEST }); // ignored: one request per port
-    await vi.waitFor(() => expect(b.sent).toEqual([{ type: 'error', code: 'api', message: 'LingoFlix sent a request it could not read.' }]));
+    await vi.waitFor(() =>
+      expect(b.sent).toEqual([{ type: 'error', code: 'api', message: 'LingoFlix sent a request it could not read.', provider: null }]),
+    );
   });
 });

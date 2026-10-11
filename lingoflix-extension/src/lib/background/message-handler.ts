@@ -55,7 +55,7 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
       await deps.createClient(key).checkKey();
       return { result: 'valid', message: 'Your key works.' };
     } catch (err) {
-      const { code, message } = toExplainError(err);
+      const { code, message } = toExplainError(err, provider);
       if (code === 'bad-key') return { result: 'rejected', message: `${company} rejected this key.` };
       if (code === 'network') return { result: 'network', message: `Couldn't reach ${company}. Check your connection.` };
       return { result: 'error', message };

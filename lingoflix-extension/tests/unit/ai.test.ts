@@ -9,7 +9,7 @@ import {
   titleLine,
   type ExplainRequest,
 } from '@/lib/ai/prompt';
-import { MAX_LINE_CHARS, MAX_STORY_CHARS, fitStory, parseClientMessage } from '@/lib/ai/protocol';
+import { MAX_LINE_CHARS, MAX_STORY_CHARS, UNREACHABLE, errorCopy, fitStory, parseClientMessage } from '@/lib/ai/protocol';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
@@ -151,40 +151,78 @@ describe('buildFollowUpMessages', () => {
   });
 });
 
-describe('toExplainError', () => {
+describe('errorCopy (free-own-key spec §4.6 card headlines)', () => {
+  it('names the provider, or its company for credit', () => {
+    expect((['no-key', 'bad-key', 'no-credit', 'busy', 'network', 'api'] as const).map((code) => [errorCopy(code, 'claude'), errorCopy(code, 'openai')])).toEqual([
+      ['Add your API key', 'Add your API key'],
+      ['Your Claude key was rejected', 'Your OpenAI key was rejected'],
+      ['Your Anthropic account is out of credit', 'Your OpenAI account is out of credit'],
+      ['Claude is busy right now', 'OpenAI is busy right now'],
+      ["Couldn't reach Claude", "Couldn't reach OpenAI"],
+      ['Claude returned an error', 'OpenAI returned an error'],
+    ]);
+  });
+
+  it("without a provider (no key, or the background dropped before reading it), names none", () => {
+    expect(errorCopy('no-key', null)).toBe('Add your API key');
+    expect(errorCopy('network', null)).toBe(UNREACHABLE);
+    expect(UNREACHABLE).toBe("Couldn't reach LingoFlix's background");
+  });
+});
+
+describe('toExplainError (Anthropic SDK errors)', () => {
   const headers = new Headers();
-  it('maps API failures to the card states of spec §7.4', () => {
-    expect(toExplainError(APIError.generate(401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 'x', headers))).toEqual({
-      code: 'bad-key',
-      message: 'Your API key was rejected',
+  it('maps API failures to the card states of spec §4.6, naming the provider', () => {
+    expect(
+      toExplainError(APIError.generate(401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 'x', headers), 'claude'),
+    ).toEqual({ code: 'bad-key', message: 'Your Claude key was rejected' });
+    expect(toExplainError(APIError.generate(429, { error: { type: 'rate_limit_error', message: 'slow' } }, 'x', headers), 'claude').code).toBe('busy');
+    expect(toExplainError(APIError.generate(529, { error: { type: 'overloaded_error', message: 'Overloaded' } }, 'x', headers), 'claude').code).toBe('busy');
+    expect(toExplainError(new APIConnectionError({ message: 'fetch failed' }), 'claude')).toEqual({ code: 'network', message: "Couldn't reach Claude" });
+    expect(toExplainError(new APIConnectionTimeoutError(), 'claude').code).toBe('network');
+  });
+
+  it('a 402 billing_error, before or during the stream, is no-credit', () => {
+    const billing = { error: { type: 'billing_error', message: 'Your credit balance is too low.' } };
+    expect(toExplainError(APIError.generate(402, billing, 'x', headers), 'claude')).toEqual({
+      code: 'no-credit',
+      message: 'Your Anthropic account is out of credit',
     });
-    expect(toExplainError(APIError.generate(429, { error: { type: 'rate_limit_error', message: 'slow' } }, 'x', headers)).code).toBe('busy');
-    expect(toExplainError(APIError.generate(529, { error: { type: 'overloaded_error', message: 'Overloaded' } }, 'x', headers)).code).toBe('busy');
-    expect(toExplainError(new APIConnectionError({ message: 'fetch failed' })).code).toBe('network');
-    expect(toExplainError(new APIConnectionTimeoutError()).code).toBe('network');
+    const midStream = new APIError(undefined, { type: 'error', ...billing }, undefined, undefined, 'billing_error');
+    expect(toExplainError(midStream, 'claude').code).toBe('no-credit');
   });
 
   it('server errors and mid-stream rate limit or overload errors are busy, never raw HTML', () => {
-    expect(toExplainError(APIError.generate(500, { error: { type: 'api_error', message: 'x' } }, 'x', headers))).toEqual({
+    expect(toExplainError(APIError.generate(500, { error: { type: 'api_error', message: 'x' } }, 'x', headers), 'claude')).toEqual({
       code: 'busy',
       message: 'Claude is busy right now',
     });
-    const badGateway = toExplainError(APIError.generate(502, '<html>bad gateway</html>' as never, '502 <html>', headers));
+    const badGateway = toExplainError(APIError.generate(502, '<html>bad gateway</html>' as never, '502 <html>', headers), 'claude');
     expect(badGateway).toEqual({ code: 'busy', message: 'Claude is busy right now' });
     for (const type of ['rate_limit_error', 'overloaded_error'] as const) {
       const midStream = new APIError(undefined, { type: 'error', error: { type, message: 'slow' } }, undefined, undefined, type);
-      expect(toExplainError(midStream).code).toBe('busy');
+      expect(toExplainError(midStream, 'claude').code).toBe('busy');
     }
   });
 
-  it("shows Anthropic's own message for other API errors", () => {
-    const credit = APIError.generate(
+  it("a 400 about the credit balance is no-credit too (a text match on Anthropic's sentence, any case)", () => {
+    for (const message of ['Your credit balance is too low to access the Anthropic API.', 'Your CREDIT BALANCE is too low.']) {
+      const credit = APIError.generate(400, { error: { type: 'invalid_request_error', message } }, 'x', headers);
+      expect(toExplainError(credit, 'claude')).toEqual({ code: 'no-credit', message: 'Your Anthropic account is out of credit' });
+    }
+  });
+
+  it("shows Anthropic's own message for other API errors, else names the provider", () => {
+    const tooLong = APIError.generate(
       400,
-      { error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' } },
+      { error: { type: 'invalid_request_error', message: 'prompt is too long: 250000 tokens > 200000 maximum' } },
       'x',
       headers,
     );
-    expect(toExplainError(credit)).toEqual({ code: 'api', message: 'Your credit balance is too low to access the Anthropic API.' });
+    expect(toExplainError(tooLong, 'claude')).toEqual({ code: 'api', message: 'prompt is too long: 250000 tokens > 200000 maximum' });
+    const notFound = APIError.generate(404, { error: { type: 'not_found_error', message: 'model: no credit balance here' } }, 'x', headers);
+    expect(toExplainError(notFound, 'claude')).toEqual({ code: 'api', message: 'model: no credit balance here' });
+    expect(toExplainError(new Error(''), 'claude')).toEqual({ code: 'api', message: 'Claude returned an error' });
   });
 });
 

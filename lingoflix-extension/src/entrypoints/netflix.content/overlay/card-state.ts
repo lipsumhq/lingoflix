@@ -1,4 +1,5 @@
 import type { ExplainErrorCode } from '@/lib/ai/protocol';
+import type { Provider } from '@/lib/ai/provider';
 import type { CardSections } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
 
@@ -34,7 +35,8 @@ export interface CardState {
   response: string;
   /** The stored explanation, once Claude finished or when found in the history. */
   explanation: Explanation | null;
-  error: { code: CardErrorCode; message: string } | null;
+  /** `provider` is the key's when the background named it (for the no-credit billing link). */
+  error: { code: CardErrorCode; message: string; provider: Provider | null } | null;
   followUps: FollowUpView[];
   followUpBusy: boolean;
   sections: CardSections;

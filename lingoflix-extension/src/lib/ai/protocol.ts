@@ -4,6 +4,7 @@ import { CARD_SECTION_IDS, type CardSections } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
 import { STORY_SEND_LIMIT, type StoryLine } from '@/lib/subtitles/context';
 import type { ExplainRequest } from './prompt';
+import { PROVIDERS, type Provider } from './provider';
 
 /** One Port per request (spec §6.3); disconnecting aborts it. */
 export const EXPLAIN_PORT = 'explain';
@@ -12,25 +13,42 @@ export type ExplainClientMessage =
   | { type: 'start'; request: ExplainRequest }
   | { type: 'follow-up'; explanationId: string; question: string; sections: CardSections; storySoFar: StoryLine[] };
 
-export type ExplainErrorCode = 'no-key' | 'bad-key' | 'busy' | 'network' | 'api';
+export type ExplainErrorCode = 'no-key' | 'bad-key' | 'no-credit' | 'busy' | 'network' | 'api';
+
+/** The `network` headline when no provider is known: the Port dropped, or the background failed before reading the key. */
+export const UNREACHABLE = "Couldn't reach LingoFlix's background";
 
 /**
- * Spec §7.4 card headlines. For `api`, the card shows Anthropic's own message instead. Kept here, not in
- * errors.ts, so the content script can use it without bundling the Anthropic SDK.
+ * Free-own-key spec §4.6 card headlines, naming the key's provider (its company for credit). For `api`, the card
+ * shows the provider's own message when there is one. Kept here, not in errors.ts, so the content script can use
+ * it without bundling an SDK.
  */
-export const ERROR_COPY: Record<ExplainErrorCode, string> = {
-  'no-key': 'Add your Claude API key',
-  'bad-key': 'Your API key was rejected',
-  busy: 'Claude is busy right now',
-  network: "Couldn't reach Claude",
-  api: 'Claude returned an error',
-};
+export function errorCopy(code: ExplainErrorCode, provider: Provider | null): string {
+  if (code === 'no-key') return 'Add your API key';
+  if (provider === null) return UNREACHABLE;
+  const { name, company } = PROVIDERS[provider];
+  switch (code) {
+    case 'bad-key':
+      return `Your ${name} key was rejected`;
+    case 'no-credit':
+      return `Your ${company} account is out of credit`;
+    case 'busy':
+      return `${name} is busy right now`;
+    case 'network':
+      return `Couldn't reach ${name}`;
+    case 'api':
+      return `${name} returned an error`;
+  }
+}
 
-/** v2 spec §4.2: the stored explanation, and the index keys of its card rows that are saved. */
+/**
+ * v2 spec §4.2: the stored explanation, and the index keys of its card rows that are saved. An error names the
+ * key's provider (null when none is known), for the card's billing link.
+ */
 export type ExplainServerMessage =
   | { type: 'delta'; text: string }
   | { type: 'done'; explanation: Explanation; savedKeys: string[] }
-  | { type: 'error'; code: ExplainErrorCode; message: string };
+  | { type: 'error'; code: ExplainErrorCode; message: string; provider: Provider | null };
 
 /** The longest phrase, context line or story line a request may carry. */
 export const MAX_LINE_CHARS = 2000;

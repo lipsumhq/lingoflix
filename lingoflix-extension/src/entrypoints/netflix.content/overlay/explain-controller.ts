@@ -65,7 +65,7 @@ export function createExplainController(deps: ExplainControllerDeps): ExplainCon
       // The payload says which rows are saved, so items saved before (e.g. before Regenerate) show as Saved.
       onDone: (explanation, savedKeys) =>
         update(key, (c) => ({ ...c, status: 'done', response: explanation.response, explanation, savedKeys, error: null })),
-      onError: (code, message) => update(key, (c) => ({ ...c, status: 'error', error: { code, message } })),
+      onError: (code, message, provider) => update(key, (c) => ({ ...c, status: 'error', error: { code, message, provider } })),
     });
   };
 
@@ -98,7 +98,7 @@ export function createExplainController(deps: ExplainControllerDeps): ExplainCon
     };
     if (imageBased || !line) {
       request = null;
-      deps.store.set({ ...base, status: 'error', error: { code: 'image-subs', message: IMAGE_SUBTITLES_MESSAGE } });
+      deps.store.set({ ...base, status: 'error', error: { code: 'image-subs', message: IMAGE_SUBTITLES_MESSAGE, provider: null } });
       return true;
     }
 

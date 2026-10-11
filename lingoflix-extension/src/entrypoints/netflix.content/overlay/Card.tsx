@@ -2,6 +2,7 @@ import { ArrowUp, BookOpen, Check, Loader2, Plus, RotateCcw, Settings as Setting
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { LogoMark } from '@/components/Logo';
 import { Markdown } from '@/components/Markdown';
+import { PROVIDERS } from '@/lib/ai/provider';
 import { cardRows } from '@/lib/ai/suggestions';
 import { suggestionKey } from '@/lib/study-log/items';
 import type { Explanation, ItemType, SaveSuggestion } from '@/lib/study-log/types';
@@ -33,14 +34,26 @@ const savedButton = `${saveToggle} border-2 border-brand bg-brand text-on-brand 
 
 const TYPE_BADGE: Record<ItemType, string> = { word: 'WORD', phrase: 'PHRASE', idiom: 'IDIOM', line: 'LINE' };
 
+/** Free-own-key spec §4.6: the headline, then Open Settings or Retry; out of credit also links to the billing page. */
 function ErrorBlock({ error, onRetry, onOpenSettings }: { error: NonNullable<CardState['error']>; onRetry(): void; onOpenSettings(): void }) {
   const needsSettings = error.code === 'no-key' || error.code === 'bad-key';
-  const canRetry = error.code === 'busy' || error.code === 'network';
+  const canRetry = error.code === 'busy' || error.code === 'network' || error.code === 'no-credit';
+  const billing = error.code === 'no-credit' && error.provider ? PROVIDERS[error.provider] : null;
   return (
     <div className="rounded-xl border-2 border-line bg-soft px-3 py-2.5">
       <p role="alert" className="text-[14px] font-extrabold">
         {error.message}
       </p>
+      {billing && (
+        <a
+          href={billing.billingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 inline-block text-[13px] font-bold text-tint-ink underline underline-offset-2"
+        >
+          Add credit at {billing.console}
+        </a>
+      )}
       {needsSettings && (
         <button type="button" className={`${primaryButton} mt-2`} onClick={onOpenSettings}>
           <SettingsIcon size={14} strokeWidth={3} aria-hidden />

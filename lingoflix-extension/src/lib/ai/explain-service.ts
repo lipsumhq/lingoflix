@@ -1,12 +1,12 @@
-import { CLAUDE_IDLE_TIMEOUT_MS } from '@/lib/config';
+import { AI_IDLE_TIMEOUT_MS } from '@/lib/config';
 import type { Explanation, FollowUp, NewExplanation, SaveSuggestion } from '@/lib/study-log/types';
 import type { StoryLine } from '@/lib/subtitles/context';
 import type { AiClient, StreamParams, StreamResult, SystemBlock, ToolCall } from './client';
 import { learningHistoryBlock, splitStory, storyBlock, type HistorySources } from './context-blocks';
 import { toExplainError } from './errors';
 import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, type ExplainRequest } from './prompt';
-import { PROVIDERS, providerOf } from './provider';
-import { ERROR_COPY, parseClientMessage, type ExplainErrorCode, type ExplainServerMessage } from './protocol';
+import { PROVIDERS, providerOf, type Provider } from './provider';
+import { errorCopy, parseClientMessage, type ExplainErrorCode, type ExplainServerMessage } from './protocol';
 import { SUGGEST_SAVES_TOOL, SUGGEST_SAVES_TOOL_NAME, validateSuggestions } from './suggestions';
 
 /** The part of `chrome.runtime.Port` the service uses. */
@@ -31,7 +31,6 @@ export interface ExplainServiceDeps {
 
 const UNREADABLE = 'LingoFlix sent a request it could not read.';
 const EXPLANATION_GONE = 'This explanation is no longer available.';
-const EMPTY_ANSWER = 'Claude returned an empty answer.';
 
 function explanationFields(request: ExplainRequest, response: string, suggestions: SaveSuggestion[], model: string): NewExplanation {
   const title = request.title;
@@ -53,7 +52,7 @@ function explanationFields(request: ExplainRequest, response: string, suggestion
   };
 }
 
-/** v2 spec §5.4: the first suggest_saves call, checked; none when Claude didn't call it. */
+/** v2 spec §5.4: the first suggest_saves call, checked; none when the model didn't call it. */
 function suggestionsFrom(calls: readonly ToolCall[], line: string): SaveSuggestion[] {
   const call = calls.find((c) => c.name === SUGGEST_SAVES_TOOL_NAME);
   return call ? validateSuggestions(call.input, line) : [];
@@ -84,7 +83,7 @@ function contextFor(
 /**
  * Serves one explanation or follow-up over a Port (spec §6.3). Streams deltas, saves the result only when
  * the stream completed and the card is still open, and aborts when the Port disconnects or the stream is
- * silent for 30 s.
+ * silent (no event at all) for 30 s. Errors name the key's provider (free-own-key spec §4.6).
  */
 export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): void {
   const abort = new AbortController();
@@ -92,17 +91,20 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
   let received = false;
   let timedOut = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The saved key's provider, once read. */
+  let provider: Provider | null = null;
 
   const post = (message: ExplainServerMessage) => {
     if (!disconnected) port.postMessage(message);
   };
-  const fail = (code: ExplainErrorCode, message: string = ERROR_COPY[code]) => post({ type: 'error', code, message });
+  const fail = (code: ExplainErrorCode, message: string = errorCopy(code, provider)) =>
+    post({ type: 'error', code, message, provider });
   const armIdleTimer = () => {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       timedOut = true;
       abort.abort();
-    }, deps.idleTimeoutMs ?? CLAUDE_IDLE_TIMEOUT_MS);
+    }, deps.idleTimeoutMs ?? AI_IDLE_TIMEOUT_MS);
   };
 
   port.onDisconnect.addListener(() => {
@@ -135,8 +137,9 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
     if (!message) return fail('api', UNREADABLE);
     const apiKey = await deps.getApiKey();
     // A key saved before Save checked the provider, that is neither Claude's nor OpenAI's, counts as none.
-    const provider = apiKey ? providerOf(apiKey) : null;
-    if (!apiKey || !provider) return fail('no-key');
+    const keyProvider = apiKey ? providerOf(apiKey) : null;
+    if (!apiKey || !keyProvider) return fail('no-key');
+    provider = keyProvider;
     if (disconnected) return;
 
     let params: StreamParams;
@@ -154,7 +157,7 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
       };
       finish = (result) =>
         deps.saveExplanation(
-          explanationFields(request, result.text, suggestionsFrom(result.toolCalls, request.phrase), PROVIDERS[provider].model),
+          explanationFields(request, result.text, suggestionsFrom(result.toolCalls, request.phrase), PROVIDERS[keyProvider].model),
         );
     } else {
       const explanation = await deps.getExplanation(message.explanationId);
@@ -179,10 +182,11 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
           post({ type: 'delta', text: delta });
         },
         abort.signal,
+        armIdleTimer,
       );
       clearTimeout(idleTimer);
       if (disconnected) return; // the card closed: nothing is saved
-      if (!result.text.trim()) return fail('api', EMPTY_ANSWER);
+      if (!result.text.trim()) return fail('api', `${PROVIDERS[keyProvider].name} returned an empty answer.`);
       const explanation = await finish(result);
       if (!explanation) return fail('api', EXPLANATION_GONE);
       // The explanation is stored; not knowing which rows are saved only shows them as unsaved.
@@ -192,7 +196,7 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
       clearTimeout(idleTimer);
       if (disconnected) return;
       if (timedOut) return fail('network');
-      const { code, message: text } = toExplainError(err);
+      const { code, message: text } = toExplainError(err, keyProvider);
       fail(code, text);
     }
   }
