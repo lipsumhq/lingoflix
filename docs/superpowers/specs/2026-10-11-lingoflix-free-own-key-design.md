@@ -289,7 +289,7 @@ unlock nothing; the terms may change, with the date on the page; contact.
   environment variables, migrations and deploying.
 - The root README: "Claude explains" becomes Claude or OpenAI; the key section covers both providers and both key
   pages; the "Premium, the AI endpoint" line goes; Support and donations stays.
-- The subscription spec and Premium Plan 1's plan get a first line: `Abandoned 2026-10-11: LingoFlix stays free with
+- The subscription spec and Premium Plan 1's plan get a line under their title: `Abandoned 2026-10-11: LingoFlix stays free with
   the learner's own key. See docs/superpowers/specs/2026-10-11-lingoflix-free-own-key-design.md.` They stay in `docs/`.
 
 ## 6. Cleanup after merge
