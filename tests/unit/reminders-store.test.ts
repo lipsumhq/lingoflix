@@ -103,6 +103,13 @@ describe('watch activity', () => {
     expect(await storage.getItem('local:activity')).toEqual({ lastWatchedOn: '2026-10-14', show: SHOW, streak: 3 });
   });
 
+  it('a new show replaces the stored one', async () => {
+    await updateReminders((r) => ({ ...r, enabled: true }));
+    await storage.setItem('local:activity', { lastWatchedOn: '2026-10-13', show: SHOW });
+    await recordWatched({ id: '81231974', title: 'Wednesday' }, EVENING);
+    expect(await loadActivity()).toEqual({ lastWatchedOn: '2026-10-14', show: { id: '81231974', title: 'Wednesday' } });
+  });
+
   it('is deleted by clearActivity', async () => {
     await updateReminders((r) => ({ ...r, enabled: true }));
     await recordWatched(SHOW, EVENING);
