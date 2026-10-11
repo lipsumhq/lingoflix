@@ -1,7 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { primaryButton, secondaryButton } from "@/components/styles";
-import { TRIAL_DAYS } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Welcome" };
 
@@ -10,8 +7,11 @@ const SHORTCUTS: [string, string][] = [
   ["Go to the previous or next line", "A / D"],
   ["Replay the current line", "R"],
   ["Hide or show subtitles", "C"],
-  ["Save the line to your Study Log", "B"],
 ];
+
+/** Where each provider makes API keys (the same pages the extension's Settings card links to). */
+const ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys";
+const OPENAI_KEYS_URL = "https://platform.openai.com/api-keys";
 
 export default function WelcomePage() {
   return (
@@ -53,19 +53,26 @@ export default function WelcomePage() {
         <p className="mt-3 text-sm text-mute">{"You can change every key in LingoFlix's settings."}</p>
       </section>
 
-      <section aria-labelledby="premium-heading" className="rounded-3xl border-2 border-tint-line bg-tint px-6 py-8">
-        <h2 id="premium-heading" className="text-2xl font-black">
-          Explanations are part of Premium
+      <section aria-labelledby="key-heading" className="rounded-3xl border-2 border-tint-line bg-tint px-6 py-8">
+        <h2 id="key-heading" className="text-2xl font-black">
+          Add your key
         </h2>
-        <p className="mt-2 font-semibold">{`Try every Premium feature free for ${TRIAL_DAYS} days.`}</p>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <Link href="/upgrade" className={primaryButton}>
-            {`Start your ${TRIAL_DAYS}-day free trial`}
-          </Link>
-          <Link href="/sign-in?next=%2Fconnect" className={secondaryButton}>
-            Sign in
-          </Link>
-        </div>
+        <ol className="mt-3 list-decimal space-y-1 pl-6 font-semibold">
+          <li>
+            Get an API key from Anthropic (
+            <a href={ANTHROPIC_KEYS_URL} className="underline">
+              console.anthropic.com
+            </a>
+            ) or OpenAI (
+            <a href={OPENAI_KEYS_URL} className="underline">
+              platform.openai.com
+            </a>
+            ).
+          </li>
+          <li>{"Click the LingoFlix icon in Chrome's toolbar, then Add your API key."}</li>
+          <li>Paste the key, press Save, then Test key.</li>
+        </ol>
+        <p className="mt-4">Usage is billed by Anthropic or OpenAI. Your key stays on this computer.</p>
       </section>
     </div>
   );

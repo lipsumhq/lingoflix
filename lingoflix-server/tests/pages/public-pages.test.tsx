@@ -82,14 +82,28 @@ describe("welcome page", () => {
       ["Go to the previous or next line", "A / D"],
       ["Replay the current line", "R"],
       ["Hide or show subtitles", "C"],
-      ["Save the line to your Study Log", "B"],
     ]);
   });
 
-  it("offers the trial and sign-in", () => {
+  it("says how to add a Claude or OpenAI key, with no trial or sign-in", () => {
     render(<WelcomePage />);
-    expect(screen.getByRole("link", { name: "Start your 7-day free trial" }).getAttribute("href")).toBe("/upgrade");
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/sign-in?next=%2Fconnect");
+    const key = screen.getByRole("region", { name: "Add your key" });
+    expect(
+      within(key)
+        .getAllByRole("listitem")
+        .map((step) => step.textContent),
+    ).toEqual([
+      "Get an API key from Anthropic (console.anthropic.com) or OpenAI (platform.openai.com).",
+      "Click the LingoFlix icon in Chrome's toolbar, then Add your API key.",
+      "Paste the key, press Save, then Test key.",
+    ]);
+    expect(within(key).getByText("Usage is billed by Anthropic or OpenAI. Your key stays on this computer.")).toBeTruthy();
+    // The only links on the page are the two key pages: nothing to /upgrade or /sign-in.
+    expect(linksIn(document.body)).toEqual([
+      ["console.anthropic.com", "https://console.anthropic.com/settings/keys"],
+      ["platform.openai.com", "https://platform.openai.com/api-keys"],
+    ]);
+    expect(document.body.textContent).not.toMatch(/Premium|trial|sign in/i);
   });
 });
 
