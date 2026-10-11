@@ -80,6 +80,8 @@ Added 2026-10-10 at the user's request: jumping by sentence, not only by a fixed
 
 ### 5.3 Hover-to-explain and the explanation card
 
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
+
 Flow:
 1. The overlay tracks `mousemove` on the document and hit-tests the pointer against the bounding rects of the visible subtitle text (padded by 8 px). This does not depend on Netflix's subtitle elements receiving pointer events.
 2. On entering a line: if **Pause on hover** is on (default: on) and the video is playing, LingoFlix pauses it and remembers that it did.
@@ -112,6 +114,8 @@ The card mounts inside Netflix's player container so it is visible in fullscreen
 - Keystrokes in the box are stopped from propagating to Netflix (Space types a space, not pause).
 
 ### 5.5 Study Log
+
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
 
 Every successful explanation is saved automatically.
 
@@ -246,6 +250,8 @@ Settings are read through one typed module that fills defaults for missing field
 
 ### 7.2 Explanation request
 
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
+
 **System prompt** (assembled from enabled sections):
 
 > You are a language tutor helping a learner understand dialogue from a show or film they are watching on Netflix. Write your entire answer in {explanation language}; quote words from the original line in their original language. Use the surrounding dialogue and the title information to work out the speaker, the tone, and what the line actually means in this scene. Text in square brackets is a sound description or speaker label, not dialogue. Be concise: the learner has paused the video. Do not use em dashes; use a colon or a comma instead. Use Markdown with exactly these sections, in this order, with headings written in {explanation language}: {enabled section list with one-sentence descriptions from §5.3}.
@@ -330,7 +336,7 @@ If any check fails, the affected behavior uses the fallback already defined abov
 
 - **Permissions:** `storage`, `unlimitedStorage`, `offscreen`; host permissions `https://www.netflix.com/*` and `https://api.anthropic.com/*`. Microphone access is a runtime prompt on the extension's own page.
 - The API key is stored in `chrome.storage.local`, read only by the background worker, and sent only to `api.anthropic.com`.
-- Subtitle text, surrounding dialogue, and title info are sent to Anthropic only when the user requests an explanation or follow-up.
+- Subtitle text, surrounding dialogue, title info, the episode's earlier subtitle lines (setting "Send the story so far", on by default), and a short learning history (recent saved items and explained lines) are sent to Anthropic only when the user requests an explanation or follow-up.
 - Voice recordings exist only in memory and are discarded immediately.
 - No analytics, no LingoFlix server. Study Log is local only.
 - A privacy policy page (hosted on `jaycho1214.github.io`) states the above for the Chrome Web Store listing.

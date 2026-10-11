@@ -152,8 +152,9 @@ One streamed Messages request per explanation (model and timeouts unchanged from
 | `tool_choice` | `auto` (a forced tool would suppress the explanation text) | |
 | `max_tokens` | **1536** (was 1024) so the tool call fits after the explanation | |
 
-Empty parts are left out (an empty block is never sent). Follow-up requests send the same `system[1]` and
-`system[2]` when available (cache hits), no `tools`, and `max_tokens` 1024 as today.
+Empty parts are left out (an empty block is never sent). Follow-up requests send the same story so far and
+learning history blocks when available, no `tools`, and `max_tokens` 1024 as today. Their prefix differs from an
+explanation's (no `tools`, a different `system[0]`), so they reuse only caches written by earlier follow-ups.
 
 ### 5.2 Context blocks
 
