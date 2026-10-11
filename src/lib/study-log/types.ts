@@ -46,6 +46,10 @@ export type NewExplanation = Omit<Explanation, 'id' | 'followUps' | 'savedAt' | 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const isStringArray = (value: unknown) => Array.isArray(value) && value.every((v) => typeof v === 'string');
+const isNullableString = (value: unknown) => value === null || typeof value === 'string';
+const isNullableNumber = (value: unknown) => value === null || (typeof value === 'number' && Number.isFinite(value));
+const isFollowUp = (value: unknown): value is FollowUp =>
+  isRecord(value) && typeof value.question === 'string' && typeof value.answer === 'string';
 
 export function isSaveSuggestion(value: unknown): value is SaveSuggestion {
   return (
@@ -59,6 +63,7 @@ export function isSaveSuggestion(value: unknown): value is SaveSuggestion {
 /**
  * A stored (or imported) explanation, or null when the value isn't one. A record written before v2 has no
  * `suggestions`, so it reads as `[]`; malformed suggestions are dropped one by one and the rest are kept.
+ * A malformed follow-up makes the whole record invalid: dropping it would lose part of a conversation.
  */
 export function toExplanation(value: unknown): Explanation | null {
   if (!isRecord(value)) return null;
@@ -68,13 +73,19 @@ export function toExplanation(value: unknown): Explanation | null {
     typeof v.phrase === 'string' &&
     typeof v.response === 'string' &&
     Array.isArray(v.followUps) &&
+    v.followUps.every(isFollowUp) &&
     typeof v.videoTimeMs === 'number' &&
     typeof v.savedAt === 'string' &&
     typeof v.updatedAt === 'string' &&
     typeof v.videoId === 'string' &&
     (v.kind === 'episode' || v.kind === 'movie') &&
+    isNullableString(v.seriesId) &&
     typeof v.seriesTitle === 'string' &&
+    isNullableNumber(v.seasonNumber) &&
+    isNullableNumber(v.episodeNumber) &&
+    isNullableString(v.episodeTitle) &&
     typeof v.explanationLanguage === 'string' &&
+    typeof v.model === 'string' &&
     isRecord(v.context) &&
     isStringArray(v.context.before) &&
     isStringArray(v.context.after);
@@ -110,9 +121,6 @@ export interface SavedItem {
   savedAt: string;
   updatedAt: string;
 }
-
-const isNullableString = (value: unknown) => value === null || typeof value === 'string';
-const isNullableNumber = (value: unknown) => value === null || (typeof value === 'number' && Number.isFinite(value));
 
 export function isSavedItem(value: unknown): value is SavedItem {
   if (!isRecord(value)) return false;

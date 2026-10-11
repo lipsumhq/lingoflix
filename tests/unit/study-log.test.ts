@@ -137,6 +137,40 @@ describe('explanation records (v2 spec §3.1)', () => {
     expect(toExplanation([])).toBeNull();
   });
 
+  it('reads well-formed follow-ups and a movie record with no series, season, episode or episode title', () => {
+    const followUps = [{ question: 'Formal?', answer: 'No.' }];
+    expect(toExplanation(stored({ followUps }))?.followUps).toEqual(followUps);
+    const movie = stored({ kind: 'movie', seriesId: null, seasonNumber: null, episodeNumber: null, episodeTitle: null });
+    expect(toExplanation(movie)).toEqual(movie);
+  });
+
+  it('rejects a record with a malformed follow-up (an imported file is checked like storage)', () => {
+    for (const followUp of [1, 'Formal?', null, [], { question: 'Formal?' }, { answer: 'No.' }, { question: 'Formal?', answer: 2 }]) {
+      expect(toExplanation(stored({ followUps: [{ question: 'Q', answer: 'A' }, followUp] }))).toBeNull();
+    }
+  });
+
+  it('rejects a record whose source fields or model have the wrong type', () => {
+    const wrong: Record<string, unknown>[] = [
+      { seriesId: 80057281 },
+      { seriesId: undefined },
+      { episodeTitle: 3 },
+      { episodeTitle: undefined },
+      { seasonNumber: '1' },
+      { seasonNumber: Number.NaN },
+      { episodeNumber: '3' },
+      { episodeNumber: Number.POSITIVE_INFINITY },
+      { episodeNumber: undefined },
+      { model: null },
+      { model: 5 },
+      { model: undefined },
+    ];
+    for (const over of wrong) {
+      const label = Object.entries(over).map(([field, value]) => `${field}: ${String(value)}`).join();
+      expect(toExplanation(stored(over)), label).toBeNull();
+    }
+  });
+
   it('recognizes a save suggestion of each type', () => {
     for (const type of ['word', 'phrase', 'idiom', 'line']) expect(isSaveSuggestion({ type, text: 't', meaning: '' })).toBe(true);
     expect(isSaveSuggestion({ type: 'sentence', text: 't', meaning: '' })).toBe(false);

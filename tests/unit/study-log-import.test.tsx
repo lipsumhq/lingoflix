@@ -143,6 +143,23 @@ describe('importBackup', () => {
     expect(await importBackup(text)).toEqual({ ok: true, summary: { itemsAdded: 0, explanationsAdded: 0, skipped: 8, invalid: 2 } });
   });
 
+  it('counts an explanation with a malformed follow-up as unreadable and adds nothing for it', async () => {
+    const before = await fakeBrowser.storage.local.get(null);
+    const text = backupFile(
+      [],
+      [
+        { ...explanation(), followUps: [1] },
+        explanation({ id: 'e2', phrase: 'Where are you going?', videoTimeMs: 1000, suggestions: [] }),
+      ],
+    );
+    expect(await importBackup(text)).toEqual({ ok: true, summary: { itemsAdded: 0, explanationsAdded: 1, skipped: 0, invalid: 1 } });
+    // Only e2 and its index key were written: nothing under e1's id or e1's line.
+    const after = await fakeBrowser.storage.local.get(null);
+    expect(Object.keys(after).filter((key) => !(key in before)).sort()).toEqual(['log:e2', 'logkey:80077211|en|Where are you going?']);
+    expect(await getExplanation('e1')).toBeNull();
+    expect(await findExplanation('80077211', 'en', LINE)).toBeNull();
+  });
+
   it('counts a record repeated within one file once', async () => {
     const text = backupFile([savedItem(), savedItem()], [explanation(), explanation()]);
     expect(await importBackup(text)).toEqual({ ok: true, summary: { itemsAdded: 1, explanationsAdded: 1, skipped: 2, invalid: 0 } });
