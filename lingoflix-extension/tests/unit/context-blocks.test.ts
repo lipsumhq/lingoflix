@@ -10,7 +10,7 @@ import {
   recentStoryText,
   splitStory,
   storyBlock,
-} from '@/lib/claude/context-blocks';
+} from '@/lib/ai/context-blocks';
 import type { Explanation, SavedItem } from '@/lib/study-log/types';
 import type { StoryLine } from '@/lib/subtitles/context';
 

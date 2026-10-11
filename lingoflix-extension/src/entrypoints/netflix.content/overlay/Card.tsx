@@ -2,7 +2,7 @@ import { ArrowUp, BookOpen, Check, Loader2, Plus, RotateCcw, Settings as Setting
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { LogoMark } from '@/components/Logo';
 import { Markdown } from '@/components/Markdown';
-import { cardRows } from '@/lib/claude/suggestions';
+import { cardRows } from '@/lib/ai/suggestions';
 import { suggestionKey } from '@/lib/study-log/items';
 import type { Explanation, ItemType, SaveSuggestion } from '@/lib/study-log/types';
 import type { Box, CardState, SaveStatus } from './card-state';

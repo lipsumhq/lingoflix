@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_SUGGESTIONS, SUGGEST_SAVES_TOOL, SUGGEST_SAVES_TOOL_NAME, cardRows, validateSuggestions } from '@/lib/claude/suggestions';
+import { MAX_SUGGESTIONS, SUGGEST_SAVES_TOOL, SUGGEST_SAVES_TOOL_NAME, cardRows, validateSuggestions } from '@/lib/ai/suggestions';
 import type { SaveSuggestion } from '@/lib/study-log/types';
 
 const LINE = "I'm gonna\ncall it a night.";

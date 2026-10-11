@@ -1,6 +1,6 @@
 import { APIConnectionError, APIConnectionTimeoutError, APIError } from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
-import { toExplainError } from '@/lib/claude/errors';
+import { toExplainError } from '@/lib/ai/errors';
 import {
   SUGGEST_INSTRUCTION,
   buildFollowUpMessages,
@@ -8,8 +8,8 @@ import {
   buildUserMessage,
   titleLine,
   type ExplainRequest,
-} from '@/lib/claude/prompt';
-import { MAX_LINE_CHARS, MAX_STORY_CHARS, fitStory, parseClientMessage } from '@/lib/claude/protocol';
+} from '@/lib/ai/prompt';
+import { MAX_LINE_CHARS, MAX_STORY_CHARS, fitStory, parseClientMessage } from '@/lib/ai/protocol';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';

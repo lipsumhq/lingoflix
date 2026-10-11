@@ -4,7 +4,7 @@ import { createExplainController } from '@/entrypoints/netflix.content/overlay/e
 import { streamExplanation, type Connect } from '@/entrypoints/netflix.content/overlay/explain-port';
 import { placeCard } from '@/entrypoints/netflix.content/overlay/positioning';
 import { createStore } from '@/entrypoints/netflix.content/overlay/store';
-import { fitStory, parseClientMessage } from '@/lib/claude/protocol';
+import { fitStory, parseClientMessage } from '@/lib/ai/protocol';
 import type { TitleInfo } from '@/lib/netflix/title';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import { suggestionKey } from '@/lib/study-log/items';

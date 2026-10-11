@@ -1,5 +1,5 @@
 import { browser } from '#imports';
-import { cardRows } from '@/lib/claude/suggestions';
+import { cardRows } from '@/lib/ai/suggestions';
 import { normalizeLine } from '@/lib/subtitles/cue';
 import { EXPLANATION_PREFIX, ITEM_INDEX_PREFIX, ITEM_PREFIX, MIGRATION_KEY } from './keys';
 import { isSavedItem, toExplanation, type Explanation, type ItemType, type SaveSuggestion, type SavedItem } from './types';

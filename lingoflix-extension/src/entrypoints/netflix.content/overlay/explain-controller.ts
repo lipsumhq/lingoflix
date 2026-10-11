@@ -1,7 +1,7 @@
 import type { BridgeClient } from '@/lib/bridge/client';
 import { parseTitleInfo } from '@/lib/bridge/protocol';
-import type { ExplainRequest } from '@/lib/claude/prompt';
-import { fitStory } from '@/lib/claude/protocol';
+import type { ExplainRequest } from '@/lib/ai/prompt';
+import { fitStory } from '@/lib/ai/protocol';
 import type { Settings } from '@/lib/settings';
 import { suggestionKey } from '@/lib/study-log/items';
 import type { Explanation, SaveSuggestion } from '@/lib/study-log/types';

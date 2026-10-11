@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { cardRows } from '@/lib/claude/suggestions';
+import { cardRows } from '@/lib/ai/suggestions';
 import {
   MIGRATION_KEY,
   deleteItems,

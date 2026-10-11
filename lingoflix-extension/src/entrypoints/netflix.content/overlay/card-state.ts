@@ -1,4 +1,4 @@
-import type { ExplainErrorCode } from '@/lib/claude/protocol';
+import type { ExplainErrorCode } from '@/lib/ai/protocol';
 import type { CardSections } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
 

@@ -1,11 +1,11 @@
 import { APIError } from '@anthropic-ai/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import type { ClaudeClient, StreamParams, SystemBlock, ToolCall } from '@/lib/claude/client';
-import { serveExplainPort, type ExplainPort, type ExplainServiceDeps } from '@/lib/claude/explain-service';
-import type { ExplainRequest } from '@/lib/claude/prompt';
-import type { ExplainServerMessage } from '@/lib/claude/protocol';
-import { SUGGEST_SAVES_TOOL } from '@/lib/claude/suggestions';
+import type { AiClient, StreamParams, SystemBlock, ToolCall } from '@/lib/ai/client';
+import { serveExplainPort, type ExplainPort, type ExplainServiceDeps } from '@/lib/ai/explain-service';
+import type { ExplainRequest } from '@/lib/ai/prompt';
+import type { ExplainServerMessage } from '@/lib/ai/protocol';
+import { SUGGEST_SAVES_TOOL } from '@/lib/ai/suggestions';
 import { CLAUDE_MODEL } from '@/lib/config';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import { listItems, saveItem, savedKeysFor, suggestionKey } from '@/lib/study-log/items';
@@ -78,7 +78,7 @@ function fakePort() {
 function fakeClient(script: { deltas?: string[]; toolCalls?: ToolCall[]; error?: unknown; hang?: boolean } = {}) {
   const calls: StreamParams[] = [];
   const signals: AbortSignal[] = [];
-  const client: ClaudeClient = {
+  const client: AiClient = {
     async stream(params, onText, signal) {
       calls.push(params);
       signals.push(signal);
@@ -97,7 +97,7 @@ function fakeClient(script: { deltas?: string[]; toolCalls?: ToolCall[]; error?:
   return { client, calls, signals };
 }
 
-function deps(client: ClaudeClient, over: Partial<ExplainServiceDeps> = {}): ExplainServiceDeps {
+function deps(client: AiClient, over: Partial<ExplainServiceDeps> = {}): ExplainServiceDeps {
   return {
     getApiKey: async () => 'sk-ant-test-key-0000',
     createClient: () => client,
@@ -142,7 +142,8 @@ describe('explain service: explanations', () => {
     });
     expect(done.savedKeys).toEqual([]);
     expect(await findExplanation('80077211', 'ko', REQUEST.phrase)).toEqual(done.explanation);
-    expect(calls[0]).toMatchObject({ model: CLAUDE_MODEL, maxTokens: 1536, tools: [SUGGEST_SAVES_TOOL] });
+    expect(calls[0]).toMatchObject({ kind: 'explain', tools: [SUGGEST_SAVES_TOOL] });
+    expect(calls[0]).not.toHaveProperty('model');
     expect(systemOf(calls[0]!)[0]).toEqual({ text: expect.stringContaining('Korean (한국어)'), cache: false });
     expect(systemOf(calls[0]!)[0]!.text).toContain('suggest_saves');
     expect(calls[0]!.messages).toEqual([{ role: 'user', content: expect.stringContaining(">>> I'm gonna call it a night.") }]);
@@ -374,7 +375,7 @@ describe('explain service: follow-ups', () => {
     ];
     send({ type: 'follow-up', explanationId: saved.id, question: ' Is it formal? ', sections: DEFAULT_SETTINGS.cardSections, storySoFar });
     await vi.waitFor(() => expect(sent.at(-1)?.type).toBe('done'));
-    expect(calls[0]).toMatchObject({ model: CLAUDE_MODEL, maxTokens: 1024 });
+    expect(calls[0]).toMatchObject({ kind: 'follow-up' });
     expect(calls[0]!.tools).toBeUndefined();
     const system = systemOf(calls[0]!);
     expect(system[0]).toEqual({ text: expect.stringContaining('follow-up question'), cache: false });

@@ -1,47 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { CLAUDE_API_BASE_URL } from '@/lib/config';
-import type { ChatMessage } from './prompt';
-
-/** One part of the system prompt; `cache` puts a prompt-cache breakpoint after it (v2 spec §5.1). */
-export interface SystemBlock {
-  text: string;
-  cache: boolean;
-}
-
-/** A tool Claude may call, in the API's shape (`input_schema` is a JSON Schema object). */
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-}
-
-export interface StreamParams {
-  model: string;
-  maxTokens: number;
-  system: string | SystemBlock[];
-  messages: ChatMessage[];
-  /** Offered with tool_choice auto, so Claude still writes its explanation first. */
-  tools?: ToolDefinition[];
-}
-
-export interface ToolCall {
-  name: string;
-  input: unknown;
-}
-
-export interface StreamResult {
-  /** The final message's text blocks, joined. */
-  text: string;
-  toolCalls: ToolCall[];
-}
-
-/** The slice of the Anthropic SDK LingoFlix uses. Tests substitute a fake. */
-export interface ClaudeClient {
-  /** Streams text deltas to `onText`; resolves with the text and tool calls; rejects with the SDK's errors. */
-  stream(params: StreamParams, onText: (delta: string) => void, signal: AbortSignal): Promise<StreamResult>;
-  /** The cheapest authenticated call, `GET /v1/models` (spec §5.8 Test key). */
-  checkKey(): Promise<void>;
-}
+import { CLAUDE_API_BASE_URL, CLAUDE_EXPLAIN_MAX_TOKENS, CLAUDE_MAX_TOKENS, CLAUDE_MODEL } from '@/lib/config';
+import type { AiClient, SystemBlock, ToolCall } from './client';
 
 type SdkSystemBlock = { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } };
 
@@ -67,15 +26,16 @@ export function readToolCalls(content: readonly unknown[]): ToolCall[] {
 
 const KEY_CHECK_TIMEOUT_MS = 15_000;
 
-export function createSdkClient(apiKey: string): ClaudeClient {
+/** The Claude adapter (free-own-key spec §4.2): Anthropic's SDK, as before the move. */
+export function createAnthropicClient(apiKey: string): AiClient {
   // Runs in the extension's service worker; the key only ever goes to api.anthropic.com.
   const client = new Anthropic({ apiKey, baseURL: CLAUDE_API_BASE_URL, dangerouslyAllowBrowser: true });
   return {
     async stream(params, onText, signal) {
       const tools = params.tools ?? [];
       const body: Parameters<typeof client.messages.stream>[0] = {
-        model: params.model,
-        max_tokens: params.maxTokens,
+        model: CLAUDE_MODEL,
+        max_tokens: params.kind === 'explain' ? CLAUDE_EXPLAIN_MAX_TOKENS : CLAUDE_MAX_TOKENS,
         system: toSdkSystem(params.system),
         messages: params.messages,
         ...(tools.length > 0

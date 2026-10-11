@@ -4,6 +4,7 @@ import type { CardSections } from '@/lib/settings';
 import type { Explanation } from '@/lib/study-log/types';
 import type { DialogueContext, StoryLine } from '@/lib/subtitles/context';
 import { normalizeLine } from '@/lib/subtitles/cue';
+import type { ChatMessage } from './client';
 import { recentStoryText } from './context-blocks';
 import { MAX_SUGGESTIONS, SUGGEST_SAVES_TOOL_NAME } from './suggestions';
 
@@ -19,11 +20,6 @@ export interface ExplainRequest {
   sections: CardSections;
   /** v2 spec §5.2: lines before the context window, oldest first; empty when Send the story so far is off. */
   storySoFar: StoryLine[];
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
 }
 
 type ContentSection = 'meaning' | 'keyExpressions' | 'howToUse';

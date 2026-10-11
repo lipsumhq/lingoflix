@@ -1,9 +1,9 @@
 import { browser, defineBackground } from '#imports';
 import { getApiKey, removeApiKey, setApiKey } from '@/lib/api-key';
 import { createMessageHandler } from '@/lib/background/message-handler';
-import { createSdkClient } from '@/lib/claude/client';
-import { serveExplainPort, type ExplainPort } from '@/lib/claude/explain-service';
-import { EXPLAIN_PORT } from '@/lib/claude/protocol';
+import { createClient } from '@/lib/ai/client';
+import { serveExplainPort, type ExplainPort } from '@/lib/ai/explain-service';
+import { EXPLAIN_PORT } from '@/lib/ai/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
 import { notificationPermission } from '@/lib/reminders/permission';
 import { installReminders } from '@/lib/reminders/service';
@@ -31,7 +31,7 @@ export default defineBackground(() => {
     getApiKey,
     setApiKey,
     removeApiKey,
-    createClient: createSdkClient,
+    createClient,
     findExplanation,
     getExplanation,
     saveItem: (explanation, suggestion) => saveItem(explanation, suggestion),
@@ -57,7 +57,7 @@ export default defineBackground(() => {
     if (port.name !== EXPLAIN_PORT || port.sender?.id !== browser.runtime.id) return;
     serveExplainPort(port as unknown as ExplainPort, {
       getApiKey,
-      createClient: createSdkClient,
+      createClient,
       saveExplanation: (fields) => saveExplanation(fields),
       getExplanation,
       appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),

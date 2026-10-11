@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { getApiKey, maskApiKey, removeApiKey, setApiKey } from '@/lib/api-key';
 import { createMessageHandler, type MessageHandlerDeps } from '@/lib/background/message-handler';
-import type { ClaudeClient } from '@/lib/claude/client';
+import type { AiClient } from '@/lib/ai/client';
 import { PENDING_SEEK_MAX_AGE_MS, setPendingSeek, takePendingSeek } from '@/lib/pending-seek';
 import { localDate } from '@/lib/reminders/schedule';
 import { loadActivity, recordWatched, updateReminders } from '@/lib/reminders/store';
@@ -37,8 +37,8 @@ const LINE: NewExplanation = {
   ],
 };
 
-function handlerWith(checkKey: ClaudeClient['checkKey'] = async () => {}, over: Partial<MessageHandlerDeps> = {}) {
-  const createClient = vi.fn((_key: string): ClaudeClient => ({ stream: async () => ({ text: '', toolCalls: [] }), checkKey }));
+function handlerWith(checkKey: AiClient['checkKey'] = async () => {}, over: Partial<MessageHandlerDeps> = {}) {
+  const createClient = vi.fn((_key: string): AiClient => ({ stream: async () => ({ text: '', toolCalls: [] }), checkKey }));
   const openOptions = vi.fn(async (_hash?: string) => {});
   const serve = createMessageHandler({
     getApiKey,

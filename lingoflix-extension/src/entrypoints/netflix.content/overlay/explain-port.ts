@@ -5,7 +5,7 @@ import {
   type ExplainClientMessage,
   type ExplainErrorCode,
   type ExplainServerMessage,
-} from '@/lib/claude/protocol';
+} from '@/lib/ai/protocol';
 import type { Explanation } from '@/lib/study-log/types';
 
 export interface PortLike {

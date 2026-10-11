@@ -1,7 +1,7 @@
-import { CLAUDE_EXPLAIN_MAX_TOKENS, CLAUDE_IDLE_TIMEOUT_MS, CLAUDE_MAX_TOKENS, CLAUDE_MODEL } from '@/lib/config';
+import { CLAUDE_IDLE_TIMEOUT_MS, CLAUDE_MODEL } from '@/lib/config';
 import type { Explanation, FollowUp, NewExplanation, SaveSuggestion } from '@/lib/study-log/types';
 import type { StoryLine } from '@/lib/subtitles/context';
-import type { ClaudeClient, StreamParams, StreamResult, SystemBlock, ToolCall } from './client';
+import type { AiClient, StreamParams, StreamResult, SystemBlock, ToolCall } from './client';
 import { learningHistoryBlock, splitStory, storyBlock, type HistorySources } from './context-blocks';
 import { toExplainError } from './errors';
 import { buildFollowUpMessages, buildSystemPrompt, buildUserMessage, type ExplainRequest } from './prompt';
@@ -17,7 +17,7 @@ export interface ExplainPort {
 
 export interface ExplainServiceDeps {
   getApiKey(): Promise<string | null>;
-  createClient(apiKey: string): ClaudeClient;
+  createClient(apiKey: string): AiClient;
   saveExplanation(fields: NewExplanation): Promise<Explanation>;
   getExplanation(id: string): Promise<Explanation | null>;
   appendFollowUp(id: string, followUp: FollowUp): Promise<Explanation | null>;
@@ -144,8 +144,7 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
       const instructions = buildSystemPrompt(request.language, request.sections);
       const { system, recent } = contextFor(instructions, request.storySoFar, request.videoTimeMs, history);
       params = {
-        model: CLAUDE_MODEL,
-        maxTokens: CLAUDE_EXPLAIN_MAX_TOKENS,
+        kind: 'explain',
         system,
         messages: [{ role: 'user', content: buildUserMessage(request, recent) }],
         tools: [SUGGEST_SAVES_TOOL],
@@ -159,8 +158,7 @@ export function serveExplainPort(port: ExplainPort, deps: ExplainServiceDeps): v
       const instructions = buildSystemPrompt(explanation.explanationLanguage, message.sections, true);
       const { system, recent } = contextFor(instructions, message.storySoFar, explanation.videoTimeMs, history);
       params = {
-        model: CLAUDE_MODEL,
-        maxTokens: CLAUDE_MAX_TOKENS,
+        kind: 'follow-up',
         system,
         messages: buildFollowUpMessages(explanation, message.question, recent),
       };

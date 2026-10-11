@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSdkClient, readToolCalls, toSdkSystem, type ToolDefinition } from '@/lib/claude/client';
+import { createAnthropicClient, readToolCalls, toSdkSystem } from '@/lib/ai/anthropic';
+import { createClient, type ToolDefinition } from '@/lib/ai/client';
 import { CLAUDE_API_BASE_URL, CLAUDE_EXPLAIN_MAX_TOKENS, CLAUDE_MAX_TOKENS } from '@/lib/config';
 
 const sdk = vi.hoisted(() => ({ stream: vi.fn(), constructed: [] as unknown[] }));
@@ -71,7 +72,7 @@ describe('readToolCalls', () => {
   });
 });
 
-describe('createSdkClient', () => {
+describe('createAnthropicClient', () => {
   it('explanations get room for the tool call (1536 tokens); follow-ups keep 1024', () => {
     expect(CLAUDE_EXPLAIN_MAX_TOKENS).toBe(1536);
     expect(CLAUDE_MAX_TOKENS).toBe(1024);
@@ -86,10 +87,9 @@ describe('createSdkClient', () => {
     );
     const deltas: string[] = [];
     const signal = new AbortController().signal;
-    const result = await createSdkClient('sk-ant-test').stream(
+    const result = await createAnthropicClient('sk-ant-test').stream(
       {
-        model: 'claude-sonnet-5-5',
-        maxTokens: CLAUDE_EXPLAIN_MAX_TOKENS,
+        kind: 'explain',
         system: [
           { text: 'Rules', cache: false },
           { text: 'Story so far', cache: true },
@@ -129,18 +129,18 @@ describe('createSdkClient', () => {
         'max_tokens',
       ),
     );
-    const result = await createSdkClient('sk-ant-test').stream(
-      { model: 'claude-sonnet-5-5', maxTokens: CLAUDE_EXPLAIN_MAX_TOKENS, system: 'Rules', messages: [{ role: 'user', content: 'Q' }], tools: [TOOL] },
+    const result = await createAnthropicClient('sk-ant-test').stream(
+      { kind: 'explain', system: 'Rules', messages: [{ role: 'user', content: 'Q' }], tools: [TOOL] },
       () => {},
       new AbortController().signal,
     );
     expect(result).toEqual({ text: 'Long', toolCalls: [] });
   });
 
-  it('without tools, sends neither tools nor tool_choice, and a plain system string', async () => {
+  it('a follow-up gets 1024 tokens and, without tools, neither tools nor tool_choice; a plain system string passes through', async () => {
     sdk.stream.mockReturnValue(fakeStream(['A'], [{ type: 'text', text: 'A' }]));
-    const result = await createSdkClient('sk-ant-test').stream(
-      { model: 'claude-sonnet-5-5', maxTokens: CLAUDE_MAX_TOKENS, system: 'Rules', messages: [{ role: 'user', content: 'Q' }] },
+    const result = await createAnthropicClient('sk-ant-test').stream(
+      { kind: 'follow-up', system: 'Rules', messages: [{ role: 'user', content: 'Q' }] },
       () => {},
       new AbortController().signal,
     );
@@ -149,5 +149,18 @@ describe('createSdkClient', () => {
     expect(body).toEqual({ model: 'claude-sonnet-5-5', max_tokens: 1024, system: 'Rules', messages: [{ role: 'user', content: 'Q' }] });
     expect('tools' in body).toBe(false);
     expect('tool_choice' in body).toBe(false);
+  });
+});
+
+describe('createClient', () => {
+  it('hands a Claude key to the Claude adapter', async () => {
+    sdk.stream.mockReturnValue(fakeStream(['A'], [{ type: 'text', text: 'A' }]));
+    const result = await createClient('sk-ant-api03-key').stream(
+      { kind: 'follow-up', system: 'Rules', messages: [{ role: 'user', content: 'Q' }] },
+      () => {},
+      new AbortController().signal,
+    );
+    expect(result).toEqual({ text: 'A', toolCalls: [] });
+    expect(sdk.constructed.at(-1)).toMatchObject({ apiKey: 'sk-ant-api03-key', dangerouslyAllowBrowser: true });
   });
 });

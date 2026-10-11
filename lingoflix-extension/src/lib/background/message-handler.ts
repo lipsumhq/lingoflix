@@ -1,7 +1,7 @@
 import { maskApiKey } from '@/lib/api-key';
-import type { ClaudeClient } from '@/lib/claude/client';
-import { toExplainError } from '@/lib/claude/errors';
-import { cardRows } from '@/lib/claude/suggestions';
+import type { AiClient } from '@/lib/ai/client';
+import { toExplainError } from '@/lib/ai/errors';
+import { cardRows } from '@/lib/ai/suggestions';
 import type { BackgroundResponse } from '@/lib/messages';
 import { suggestionKey } from '@/lib/study-log/items';
 import { isSaveSuggestion, type Explanation, type SavedItem, type SaveSuggestion } from '@/lib/study-log/types';
@@ -11,7 +11,7 @@ export interface MessageHandlerDeps {
   getApiKey(): Promise<string | null>;
   setApiKey(key: string): Promise<void>;
   removeApiKey(): Promise<void>;
-  createClient(apiKey: string): ClaudeClient;
+  createClient(apiKey: string): AiClient;
   findExplanation(videoId: string, language: string, phrase: string): Promise<Explanation | null>;
   getExplanation(id: string): Promise<Explanation | null>;
   saveItem(explanation: Explanation, suggestion: SaveSuggestion): Promise<SavedItem>;
