@@ -1,2 +1,7 @@
 packages:
   - lingoflix-extension
+  - lingoflix-server
+
+allowBuilds:
+  sharp: false
+  unrs-resolver: false

@@ -1,0 +1,52 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  PRICE_MONTHLY,
+  PRICE_YEARLY,
+  SITE_NAME,
+  SITE_URL,
+  SUPPORT_EMAIL,
+  TRIAL_DAYS,
+  chromeStoreUrl,
+} from "@/lib/site";
+
+const STORE_URL = "https://chromewebstore.google.com/detail/lingoflix/abcdefghijklmnopabcdefghijklmnop";
+
+describe("site constants", () => {
+  it("names the product, its address, its support email and its prices", () => {
+    expect(SITE_NAME).toBe("LingoFlix");
+    expect(SITE_URL).toBe("https://lingoflix.lipsum.fun");
+    expect(SUPPORT_EMAIL).toBe("support@lingoflix.lipsum.fun");
+    expect(PRICE_MONTHLY).toBe("$7.99");
+    expect(PRICE_YEARLY).toBe("$59.99");
+    expect(TRIAL_DAYS).toBe(7);
+  });
+});
+
+describe("chromeStoreUrl", () => {
+  it("is null until the store URL is set", () => {
+    expect(chromeStoreUrl({})).toBeNull();
+    expect(chromeStoreUrl({ NEXT_PUBLIC_CHROME_STORE_URL: "" })).toBeNull();
+    expect(chromeStoreUrl({ NEXT_PUBLIC_CHROME_STORE_URL: "   " })).toBeNull();
+  });
+
+  it("is null for anything but an https Chrome Web Store link", () => {
+    for (const value of [
+      "http://chromewebstore.google.com/detail/lingoflix/x",
+      "https://evil.example/detail/lingoflix/x",
+      "https://chromewebstore.google.com.evil.example/detail/x",
+      "javascript:alert(1)",
+      "chromewebstore.google.com/detail/lingoflix/x",
+    ]) {
+      expect(chromeStoreUrl({ NEXT_PUBLIC_CHROME_STORE_URL: value })).toBeNull();
+    }
+  });
+
+  it("returns a Chrome Web Store link as given", () => {
+    expect(chromeStoreUrl({ NEXT_PUBLIC_CHROME_STORE_URL: STORE_URL })).toBe(STORE_URL);
+  });
+
+  it("reads NEXT_PUBLIC_CHROME_STORE_URL from the environment by default", () => {
+    vi.stubEnv("NEXT_PUBLIC_CHROME_STORE_URL", STORE_URL);
+    expect(chromeStoreUrl()).toBe(STORE_URL);
+  });
+});
