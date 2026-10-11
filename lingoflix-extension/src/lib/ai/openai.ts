@@ -119,7 +119,13 @@ export function createOpenAIClient(apiKey: string, options: { fetch?: typeof fet
         max_output_tokens: OPENAI_MAX_OUTPUT_TOKENS,
         input: [
           ...(developer.length > 0 ? [{ role: 'developer' as const, content: developer }] : []),
-          ...params.messages.map((message): EasyInputMessage => ({ role: message.role, content: message.content })),
+          // Replayed answers are marked final: OpenAI says newer models answer follow-ups worse without `phase`.
+          ...params.messages.map(
+            (message): EasyInputMessage =>
+              message.role === 'assistant'
+                ? { role: 'assistant', content: message.content, phase: 'final_answer' }
+                : { role: message.role, content: message.content },
+          ),
         ],
         ...(tools.length > 0 ? { tools: tools.map(toFunctionTool), tool_choice: 'auto' as const, parallel_tool_calls: false } : {}),
         stream: true,
@@ -128,12 +134,19 @@ export function createOpenAIClient(apiKey: string, options: { fetch?: typeof fet
       // itself and rejects the whole answer when they aren't JSON (spec §4.3 wants no suggestions instead).
       const events = await client.responses.create(body, { signal });
       let response: Response | null = null;
-      for await (const event of events) {
-        onActivity();
-        if (event.type === 'response.output_text.delta') onText(event.delta);
-        else if (event.type === 'response.completed' || event.type === 'response.incomplete' || event.type === 'response.failed') {
-          response = event.response;
+      try {
+        for await (const event of events) {
+          onActivity();
+          if (event.type === 'response.output_text.delta') onText(event.delta);
+          else if (event.type === 'response.completed' || event.type === 'response.incomplete' || event.type === 'response.failed') {
+            response = event.response;
+          }
         }
+      } catch (err) {
+        // OpenAI's own errors (an `error` event) keep their meaning; anything else while reading the body, such as
+        // Chrome's "network error" when the connection drops, is a dropped connection the learner can retry.
+        if (err instanceof OpenAIError || signal.aborted) throw err;
+        throw new APIConnectionError({ message: 'The connection dropped.', cause: err instanceof Error ? err : undefined });
       }
       // An aborted request ends the SDK's iteration quietly: reject, so nothing is saved.
       if (signal.aborted) throw new APIUserAbortError();

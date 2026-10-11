@@ -188,7 +188,8 @@ describe('OpenAI adapter: the request (free-own-key spec §4.3, §4.5)', () => {
       input: [
         { role: 'developer', content: [{ type: 'input_text', text: 'Follow-up rules' }] },
         { role: 'user', content: 'Explain >>> Hi' },
-        { role: 'assistant', content: 'Explanation' },
+        // OpenAI asks for `phase` on replayed assistant turns: newer models answer worse without it.
+        { role: 'assistant', content: 'Explanation', phase: 'final_answer' },
         { role: 'user', content: 'Is it rude?' },
       ],
       stream: true,
@@ -267,6 +268,20 @@ describe('OpenAI adapter: the answer', () => {
 
   it('a stream that ends without a final event is a dropped connection', async () => {
     const api = fakeOpenAI(() => streamOf(answer(['Hel'], []).slice(0, -1)));
+    expect(await failureOf(api.fetch)).toEqual({ code: 'network', message: "Couldn't reach OpenAI" });
+  });
+
+  it('a connection that breaks mid-answer is a dropped connection too, with Retry', async () => {
+    const api = fakeOpenAI(() => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(sse(answer(['Hel'], []).slice(0, 2))));
+          // What Chrome's fetch throws when the network drops while the body is being read.
+          controller.error(new TypeError('network error'));
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    });
     expect(await failureOf(api.fetch)).toEqual({ code: 'network', message: "Couldn't reach OpenAI" });
   });
 });
