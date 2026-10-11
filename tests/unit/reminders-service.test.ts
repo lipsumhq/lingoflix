@@ -99,6 +99,26 @@ describe('setting the alarm', () => {
     expect(await scheduled()).toBe(at(16, 22, 15));
   });
 
+  it('a slow earlier check never overwrites the alarm a later change set', async () => {
+    let checks = 0;
+    installReminders({
+      browser: fakeBrowser,
+      notifications: () => fakeBrowser.notifications,
+      permission: {
+        ...fakePermission(true).permission,
+        has: async () => {
+          if (checks++ === 0) await new Promise((resolve) => setTimeout(resolve, 30));
+          return true;
+        },
+      },
+      now: () => at(14, 9),
+    });
+    await turnOn({ time: '21:00' });
+    await updateReminders((r) => ({ ...r, time: '22:15' }));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(await scheduled()).toBe(at(14, 22, 15));
+  });
+
   it('sets nothing without the permission', async () => {
     await turnOn();
     setup({ granted: false });
@@ -164,6 +184,25 @@ describe('when the alarm fires', () => {
     await fire(at(14, 20));
     await vi.waitFor(async () => expect(await scheduled()).toBe(at(15, 20)));
     expect(warn).toHaveBeenCalledWith('LingoFlix: showing the study reminder failed', expect.any(Error));
+  });
+
+  it('an alarm heard a little before its time is not set for that same time again', async () => {
+    await turnOn();
+    const { clock } = setup();
+    clock.now = at(14, 20) - 5_000; // the clock reads a few seconds early
+    await fire(at(14, 20));
+    await vi.waitFor(async () => expect(await scheduled()).toBe(at(15, 20)));
+  });
+
+  it('ignores alarms that are not the reminder', async () => {
+    await turnOn();
+    const create = vi.spyOn(fakeBrowser.notifications, 'create');
+    const { clock } = setup();
+    clock.now = at(14, 20);
+    await fakeBrowser.alarms.onAlarm.trigger({ name: 'something-else', scheduledTime: at(14, 20), persistAcrossSessions: false });
+    await settle();
+    expect(create).not.toHaveBeenCalled();
+    expect(await scheduled()).toBeUndefined();
   });
 });
 
