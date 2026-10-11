@@ -180,7 +180,8 @@ export function RemindersCard({ send = sendToBackground, permission = notificati
           <SendIcon size={14} strokeWidth={3} aria-hidden />
           Send a test
         </button>
-        <p role="status" className="mt-2 text-[13px] font-semibold text-mute empty:hidden">
+        {/* Kept in the accessibility tree while empty (sr-only, not display: none), so its first notice is announced. */}
+        <p role="status" className={notice ? 'mt-2 text-[13px] font-semibold text-mute' : 'sr-only'}>
           {notice ? NOTICES[notice] : ''}
         </p>
       </div>

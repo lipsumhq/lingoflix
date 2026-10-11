@@ -63,6 +63,20 @@ describe('Reminders card', () => {
     expect((await loadReminders()).enabled).toBe(false);
   });
 
+  it('keeps the status region in the accessibility tree while empty, so its first notice is announced', async () => {
+    const { permission } = fakePermission({ allow: false });
+    render(<RemindersCard permission={permission} send={fakeSend(async () => ({ ok: true }))} />);
+    const status = await screen.findByRole('status');
+    expect(status.textContent).toBe('');
+    // happy-dom has no Tailwind CSS, so the role query alone can't see `empty:hidden` (display: none): check the class.
+    expect(status.classList.contains('sr-only')).toBe(true);
+    expect(status.className).not.toContain('hidden');
+    fireEvent.click(await reminderSwitch());
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe("Chrome didn't allow notifications."));
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status.classList.contains('sr-only')).toBe(false);
+  });
+
   it('turning it off saves that and gives the permission back', async () => {
     await updateReminders((r) => ({ ...r, enabled: true }));
     const { permission } = fakePermission({ granted: true });
