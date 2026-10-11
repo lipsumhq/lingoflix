@@ -1,10 +1,7 @@
-/** Fixed facts about the LingoFlix site (spec §1, §5.3, §10). */
+/** Fixed facts about the LingoFlix site (free-own-key spec §5). LingoFlix is free: no prices, no trial. */
 export const SITE_NAME = "LingoFlix";
 export const SITE_URL = "https://lingoflix.lipsum.fun";
 export const SUPPORT_EMAIL = "support@lingoflix.lipsum.fun";
-export const PRICE_MONTHLY = "$7.99";
-export const PRICE_YEARLY = "$59.99";
-export const TRIAL_DAYS = 7;
 
 /** Where to donate: the same two pages as the extension's `DONATION_LINKS` (lingoflix-extension/src/lib/config.ts). */
 export const DONATION_LINKS = [

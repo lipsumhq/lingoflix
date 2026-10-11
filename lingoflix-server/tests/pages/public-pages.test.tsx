@@ -108,39 +108,109 @@ describe("welcome page", () => {
 });
 
 describe("privacy policy", () => {
-  it("says what the server receives, that it keeps none of the text, and who helps run it", () => {
+  it("is dated the day the free site ships", () => {
     render(<PrivacyPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Privacy policy" })).toBeTruthy();
-    expect(screen.getByText("Last updated: October 10, 2026")).toBeTruthy();
-    expect(screen.getByText(/Our server passes this to Anthropic to write the answer and does not keep it\./)).toBeTruthy();
-    expect(screen.getByText(/Never the subtitle text, your questions or the answers\./)).toBeTruthy();
+    expect(screen.getByText("Last updated: October 11, 2026")).toBeTruthy();
+  });
+
+  it("says everything stays on the computer, with no accounts or cookies", () => {
+    render(<PrivacyPage />);
     expect(
-      screen.getByText("The IP address and browser of each sign-in, to keep your account secure. Signing out deletes them."),
+      screen.getByText(
+        "Your Study Log, settings, reminders (including the show you last watched) and your API key stay on your computer.",
+      ),
     ).toBeTruthy();
+    expect(screen.getByText("LingoFlix has no accounts, and this site sets no cookies.")).toBeTruthy();
+  });
+
+  it("says what an explanation sends, straight to Anthropic or OpenAI and never through LingoFlix's server", () => {
+    render(<PrivacyPage />);
     expect(
-      screen.getByText("If you sign in with Google: your name, profile picture and the sign-in tokens Google gives us."),
+      screen.getByText(
+        "When you ask for an explanation or a follow-up, the extension sends these straight from your browser to Anthropic or OpenAI (whichever your key belongs to), with your key and never through LingoFlix's server:",
+      ),
     ).toBeTruthy();
-    for (const service of ["Anthropic", "Stripe", "Vercel", "Neon", "Cloudflare"]) {
-      expect(screen.getByText(service, { selector: "strong" })).toBeTruthy();
-    }
-    expect(screen.getByText(/we store your answer with the time and nothing else/)).toBeTruthy();
+    const sent = within(screen.getByRole("region", { name: "When you ask for an explanation" })).getByRole("list");
+    expect(
+      within(sent)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "The line and the dialogue around it.",
+      "The show and episode.",
+      'The story so far, if "Send the story so far" is on.',
+      "Your recent saved items and explained lines.",
+    ]);
+    expect(screen.getByText("Requests to OpenAI ask it not to store them.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Anthropic's privacy policy" }).getAttribute("href")).toBe(
+      "https://www.anthropic.com/legal/privacy",
+    );
+    expect(screen.getByRole("link", { name: "OpenAI's privacy policy" }).getAttribute("href")).toBe(
+      "https://openai.com/policies/privacy-policy/",
+    );
+  });
+
+  it("says the site keeps only the optional uninstall answer", () => {
+    render(<PrivacyPage />);
+    expect(
+      screen.getByText(
+        "Only your optional answer on the uninstall page: the reason, the comment and the time, with no IP address or account.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("lists the services and the contact email", () => {
+    render(<PrivacyPage />);
+    const services = within(screen.getByRole("region", { name: "Services" })).getByRole("list");
+    expect(
+      within(services)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "Anthropic or OpenAI (your own account) write the explanations and answers.",
+      "Vercel hosts this site.",
+      "Neon hosts its database.",
+      "Cloudflare forwards email sent to support.",
+    ]);
     const contact = screen.getByRole("link", { name: "support@lingoflix.lipsum.fun" });
     expect(contact.getAttribute("href")).toBe("mailto:support@lingoflix.lipsum.fun");
+  });
+
+  it("says nothing about Stripe, Premium, sign-in or our server, and mentions accounts only to say there are none", () => {
+    render(<PrivacyPage />);
+    expect(document.body.textContent).not.toMatch(/Stripe|Premium|our server|sign in|sign-in|subscription/i);
+    expect(screen.getAllByText(/account/i).map((element) => element.textContent)).toEqual([
+      "LingoFlix has no accounts, and this site sets no cookies.",
+      "Only your optional answer on the uninstall page: the reason, the comment and the time, with no IP address or account.",
+      "Anthropic or OpenAI (your own account) write the explanations and answers.",
+    ]);
   });
 });
 
 describe("terms of service", () => {
-  it("states the plan, the trial, cancellation, refunds and fair use", () => {
+  it("states the free terms, dated the day the free site ships", () => {
     render(<TermsPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Terms of service" })).toBeTruthy();
-    expect(screen.getByText(/\$7\.99\/month or \$59\.99\/year/)).toBeTruthy();
-    expect(screen.getByText(/Unless you cancel before the trial ends, your subscription starts and you're charged\./)).toBeTruthy();
-    expect(screen.getByText("Uninstalling the extension doesn't cancel your subscription.")).toBeTruthy();
-    expect(screen.getByText("If you were charged and didn't use Premium, email us within 14 days and we'll refund you.")).toBeTruthy();
-    expect(
-      screen.getByText("After heavy use in a billing period, answers may come from a faster model until your next billing date."),
-    ).toBeTruthy();
-    expect(screen.getByText("LingoFlix is not affiliated with or endorsed by Netflix.")).toBeTruthy();
+    expect(screen.getByText("Last updated: October 11, 2026")).toBeTruthy();
+    for (const sentence of [
+      "LingoFlix is free and provided as is, without warranty.",
+      "You need your own Netflix subscription and your own Claude or OpenAI API key.",
+      "Anthropic or OpenAI bills you for what your key uses, under its own terms.",
+      "AI answers can be wrong.",
+      "LingoFlix isn't affiliated with Netflix, Anthropic or OpenAI.",
+      "Donations are voluntary and unlock nothing.",
+      "These terms may change. The date at the top shows when they last did.",
+    ]) {
+      expect(screen.getByText(sentence)).toBeTruthy();
+    }
+    const contact = screen.getByRole("link", { name: "support@lingoflix.lipsum.fun" });
+    expect(contact.getAttribute("href")).toBe("mailto:support@lingoflix.lipsum.fun");
+  });
+
+  it("says nothing about Premium, Stripe, prices, trials, refunds or accounts", () => {
+    render(<TermsPage />);
+    expect(document.body.textContent).not.toMatch(/Premium|Stripe|\$|trial|refund|account/i);
   });
 });
 

@@ -1,25 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  DONATION_LINKS,
-  PRICE_MONTHLY,
-  PRICE_YEARLY,
-  SITE_NAME,
-  SITE_URL,
-  SUPPORT_EMAIL,
-  TRIAL_DAYS,
-  chromeStoreUrl,
-} from "@/lib/site";
+import * as site from "@/lib/site";
+import { DONATION_LINKS, SITE_NAME, SITE_URL, SUPPORT_EMAIL, chromeStoreUrl } from "@/lib/site";
 
 const STORE_URL = "https://chromewebstore.google.com/detail/lingoflix/abcdefghijklmnopabcdefghijklmnop";
 
 describe("site constants", () => {
-  it("names the product, its address, its support email and its prices", () => {
+  it("names the product, its address and its support email", () => {
     expect(SITE_NAME).toBe("LingoFlix");
     expect(SITE_URL).toBe("https://lingoflix.lipsum.fun");
     expect(SUPPORT_EMAIL).toBe("support@lingoflix.lipsum.fun");
-    expect(PRICE_MONTHLY).toBe("$7.99");
-    expect(PRICE_YEARLY).toBe("$59.99");
-    expect(TRIAL_DAYS).toBe(7);
+  });
+
+  it("has no prices or trial: LingoFlix is free", () => {
+    expect(Object.keys(site).filter((name) => /PRICE|TRIAL/.test(name))).toEqual([]);
   });
 
   it("links the same two donation pages as the extension", () => {
