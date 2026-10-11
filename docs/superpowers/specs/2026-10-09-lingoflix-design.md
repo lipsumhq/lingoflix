@@ -359,7 +359,7 @@ If any check fails, the affected behavior uses the fallback already defined abov
 - Subtitle text, surrounding dialogue, title info, the episode's earlier subtitle lines (setting "Send the story so far", on by default), and a learning history (up to 100 recent saved items and 30 explained lines, with the show and episode each is from) are sent to Anthropic only when the user requests an explanation or follow-up.
 - Voice recordings exist only in memory and are discarded immediately.
 - No analytics, no LingoFlix server. Study Log is stored locally only.
-- Study reminders, when turned on, keep the date the learner last watched and that show's id and title on this computer only.
+- Study reminders, when turned on, keep the date the learner last watched and that show's id and title on this computer only; turning reminders off (or removing the permission) deletes it.
 - A privacy policy page (hosted on `jaycho1214.github.io`) states the above for the Chrome Web Store listing.
 
 ## 11. Testing

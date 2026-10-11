@@ -15,15 +15,16 @@ studying languages with Netflix:
 - **Your keys.** Rewind/forward by the seconds you choose, hide subtitles with one key, and remap
   every shortcut.
 - **Study reminders.** Pick the days and a time, and LingoFlix reminds you to study with Netflix.
-  It skips the days you've already watched. Off until you turn it on.
+  It skips the days you've already watched with LingoFlix on. Off until you turn it on.
 
 LingoFlix uses your own Claude API key (you pay Anthropic directly for what you use). The key and
 your Study Log stay on your computer. Only when you ask for an explanation or a follow-up does
 LingoFlix send Anthropic the line, the show and episode it's from, the dialogue around it, the
 episode's earlier subtitle lines (you can turn this off in Settings), and a list of your recent
 saved items and explained lines (with the show and episode each is from), so Claude can build on it.
-If you turn on study reminders, LingoFlix keeps the date you last watched and that show's name on your
-computer, to skip days you've watched and to offer the show; it never leaves your computer.
+While study reminders are on, LingoFlix keeps the date you last watched with it and the name of that
+show on your computer, to skip days you've watched and to offer the show. It never leaves your
+computer, and turning reminders off deletes it.
 
 Not affiliated with or endorsed by Netflix.
 

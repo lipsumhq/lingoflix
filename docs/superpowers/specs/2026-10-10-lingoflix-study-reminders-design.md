@@ -78,10 +78,12 @@ It sends `activity:watched` (§8) when the pair (today's local date, show id or 
 sent successfully. That is at most one message per show per day, plus one when the title becomes known. A failed
 send is retried on the next check.
 
-**In the background.** On `activity:watched`, when reminders are on (`enabled: true`), it writes the activity record
-(§7): `lastWatchedOn` = today's local date, and `show` = the message's show if it is valid (§8), otherwise the
-stored show is kept. When reminders are off it writes nothing, so nothing about viewing is recorded unless the
-learner turned reminders on.
+**In the background.** On `activity:watched`, when reminders are on (`enabled: true`) and the `notifications`
+permission is granted (the switch shows on, §3), it writes the activity record (§7): `lastWatchedOn` = today's
+local date, and `show` = the message's show if it is valid (§8), otherwise the stored show is kept. Otherwise it
+writes nothing, so nothing about viewing is recorded unless the learner turned reminders on. The record is deleted
+when reminders are turned off or the permission is gone (setting the alarm, §6); writes and that delete run one at
+a time, so a watch heard as reminders are turned off can't leave a record behind.
 
 ## 6. Scheduling and firing
 
@@ -93,7 +95,7 @@ daylight-saving changes are handled; a time that doesn't exist on a spring-forwa
 `Date` normalizes it to.
 
 **Setting the alarm** (`armReminder(from)`): when reminders are on and the permission is granted, create the alarm
-at `nextReminderTime(from, …)`; otherwise clear it. It runs:
+at `nextReminderTime(from, …)`; otherwise clear it and delete the activity record (`local:activity`). It runs:
 
 | When | `from` |
 |---|---|
@@ -134,6 +136,8 @@ Otherwise it is true.
   Unknown fields are kept on write, as with settings.
 - Neither key is part of the Study Log: **Reset all**, export and backup leave them alone.
 - The options page writes `reminders`; the background is the only writer of `activity`.
+- `activity` is kept only while reminders are on: it is deleted when they are turned off or the permission is gone
+  (setting the alarm, §6).
 
 ## 8. Messages
 
@@ -207,6 +211,6 @@ the release plan (Plan 3b), not this one.
 - Main spec §6.3 (messaging): `activity:watched` and `reminder:test` (§8).
 - Main spec §6.4 (storage): `local:reminders` and `local:activity` (§7).
 - Main spec §10 (privacy and permissions): `alarms`, optional `notifications`; while reminders are on, the date the
-  learner last watched and that show's id and title are stored on this computer only. The hosted privacy policy
-  (Plan 3b) must say so.
+  learner last watched and that show's id and title are stored on this computer only, and deleted when reminders
+  are turned off. The hosted privacy policy (Plan 3b) must say so.
 - v2 spec §2 and §11: flashcards are dropped, not next (§2 here).

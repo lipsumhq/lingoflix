@@ -2014,8 +2014,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Load `.output/chrome-mv3` unpacked in Chrome (chrome://extensions → reload LingoFlix), then:
 
 1. Options → Settings → Reminders: turn **Study reminders** on and accept Chrome's prompt.
-2. Set **Time** 2 minutes ahead; the "Time to study" notification appears.
-3. Click it; a new tab opens at your last show's Netflix page (or Netflix home if none is recorded yet).
-4. Play an episode for over a minute with LingoFlix on, set the time 2 minutes ahead again; nothing appears.
-5. **Send a test**; the notification appears.
-6. Turn reminders off; chrome://extensions → LingoFlix → Details no longer lists notifications.
+2. Right after turning reminders on (step 1), **Send a test** and click it: your last show's page (or Netflix home) opens. (Click listener added after the worker started.)
+3. Set **Time** 2 minutes ahead; the "Time to study" notification appears.
+4. Click it; a new tab opens at your last show's Netflix page (or Netflix home if none is recorded yet).
+5. Play an episode for over a minute with LingoFlix on, set the time 2 minutes ahead again; nothing appears.
+6. **Send a test**; the notification appears.
+7. Wait at least 1 minute without touching LingoFlix (the worker goes idle), **Send a test**, click it: the page opens.
+8. Turn reminders off, turn them on again (accept the prompt if shown), **Send a test**, click it: Netflix home opens (turning reminders off deleted the last show).
+9. Turn reminders off; chrome://extensions → LingoFlix → Details no longer lists notifications.
