@@ -26,6 +26,7 @@ describe('options page', () => {
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Shortcuts' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Reminders' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Try this' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'GitHub Sponsors' })).toBeTruthy();
     expect(screen.getByText('Not affiliated with or endorsed by Netflix.')).toBeTruthy();

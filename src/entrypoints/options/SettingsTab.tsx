@@ -19,11 +19,13 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { Toggle } from '@/components/Toggle';
 import { buttonSecondary, card, iconTile } from '@/components/styles';
 import { useSettings } from '@/hooks/useSettings';
+import type { NotificationPermission } from '@/lib/reminders/permission';
 import { DEFAULT_SETTINGS, type SeekMode, type Settings, type ThemePreference } from '@/lib/settings';
 import { ACTION_IDS, ACTION_LABELS, DEFAULT_SHORTCUTS, type ActionId, type Binding } from '@/lib/shortcuts';
 import type { Send } from './ApiKeyCard';
 import { ApiKeyCard } from './ApiKeyCard';
 import { ExplanationsCard } from './ExplanationsCard';
+import { RemindersCard } from './RemindersCard';
 import { SecondsStepper } from './SecondsStepper';
 import { ShortcutRecorder } from './ShortcutRecorder';
 
@@ -56,7 +58,7 @@ const ACTION_HINTS: Partial<Record<ActionId, string>> = {
   explainLine: 'Explain the current line.',
 };
 
-export function SettingsTab({ send }: { send?: Send } = {}) {
+export function SettingsTab({ send, permission }: { send?: Send; permission?: NotificationPermission } = {}) {
   const { settings, update } = useSettings();
   if (!settings) return <p className="text-sm font-semibold text-mute">Loading…</p>;
 
@@ -143,6 +145,7 @@ export function SettingsTab({ send }: { send?: Send } = {}) {
 
       <ApiKeyCard send={send} />
       <ExplanationsCard settings={settings} update={update} />
+      <RemindersCard send={send} permission={permission} />
 
       <section aria-labelledby="shortcuts-heading" className={`${card} px-5 py-4`}>
         <div className="flex items-start justify-between gap-4">
