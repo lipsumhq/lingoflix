@@ -321,7 +321,9 @@ None of the learner's local data changes. The extension stops using the stored A
   - Only when a Premium learner asks for an explanation or a follow-up does the server receive the line, the dialogue
     around it, the show and episode, the story so far (if that setting is on) and the learning history.
   - The server passes that to Anthropic to produce the answer and keeps none of it. It keeps only the account (email,
-    sign-in method), the subscription state from Stripe, and per-answer usage (time, kind, model, token counts).
+    sign-in method; with Google, the name, picture and Google's sign-in tokens), each signed-in session's IP address
+    and browser (removed on sign-out), the subscription state from Stripe, and per-answer usage (time, kind, model,
+    token counts).
   - The services involved: Anthropic (AI), Stripe (payments), Vercel (hosting), Neon (database), Cloudflare (email).
   - Local-only data, as today: the Study Log, settings and reminders, including the watch record.
 - **Terms** (`/terms`): the plan, the trial, renewals and cancellation, a refund policy, and the fair-use line: "After

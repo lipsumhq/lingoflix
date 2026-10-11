@@ -23,7 +23,8 @@
 - Magic links expire after 15 minutes and work once. Expired, used or unknown links show: `That link has expired or was already used. We can send you a new one.`
 - If the sign-in email can't be sent: `Couldn't send the email. Try again or use Google.`
 - No em dashes in any copy, comment or commit message (use a colon). Commit messages end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- Tests live in `lingoflix-server/tests/` (`*.test.ts`, `*.test.tsx`); DOM tests start with `// @vitest-environment jsdom`. Write each test first and watch it fail.
+- Tests live in `lingoflix-server/tests/` (`*.test.ts`, `*.test.tsx`); DOM tests start with `// @vitest-environment jsdom`. Write each test first and watch it fail. A missing module fails as `Cannot find package '@/...'` in `.ts` tests and `Failed to resolve import "@/..."` in `.tsx` tests: either wording is the expected failure.
+- In an agent session (`CLAUDECODE` or `AI_AGENT` set), Vitest's agent reporter hides console output from passing tests. Whenever a step checks for "no warnings", run Vitest with `--reporter=default` (e.g. `pnpm --filter lingoflix-server exec vitest run --reporter=default`).
 - Commands run from the repo root: `pnpm --filter lingoflix-server <script>`; the root `pnpm test`, `pnpm compile` and `pnpm build` run every package.
 
 ## Review Focus
@@ -1403,7 +1404,7 @@ Create `lingoflix-server/tests/auth/auth.test.ts`:
 
 ```ts
 import { sql } from "kysely";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   TEST_BASE_URL,
   TEST_EXTENSION_ORIGIN,
@@ -1521,6 +1522,8 @@ describe("Google", () => {
 describe("trusted origins", () => {
   it("accepts a cookie request from the LingoFlix extension and refuses one from another site", async () => {
     t = await createTestAuth({ enforceOriginCheck: true });
+    // Better Auth logs every refused origin with console.error; keep the expected one out of the test output.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const { res } = await signInWithMagicLink(t, "learner@example.com");
     const cookie = sessionCookie(res);
     const signOutFrom = (origin: string) =>
@@ -1534,6 +1537,7 @@ describe("trusted origins", () => {
     const evil = await signOutFrom("https://evil.example");
     expect(evil.status).toBe(403);
     expect(await evil.json()).toMatchObject({ code: "INVALID_ORIGIN" });
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("Invalid origin: https://evil.example"));
     expect((await signOutFrom(TEST_EXTENSION_ORIGIN)).status).toBe(200);
   });
 });
@@ -1894,7 +1898,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 
 afterEach(cleanup);
 
-const EM_DASH = /—/;
+const EM_DASH = /\u2014/;
 const STORE_URL = "https://chromewebstore.google.com/detail/lingoflix/abcdefghijklmnopabcdefghijklmnop";
 
 describe("SiteHeader", () => {
@@ -1982,7 +1986,7 @@ import WelcomePage from "@/app/welcome/page";
 
 afterEach(cleanup);
 
-const EM_DASH = /—/;
+const EM_DASH = /\u2014/;
 const STORE_URL = "https://chromewebstore.google.com/detail/lingoflix/abcdefghijklmnopabcdefghijklmnop";
 
 const cellsOf = (rowName: RegExp) =>
@@ -2363,7 +2367,7 @@ const FEATURES = [
   },
   {
     title: "Voice shadowing",
-    body: "Record yourself saying a line and compare it with the original. Your recording never leaves your computer.",
+    body: "Coming soon: record yourself saying a line and compare it with the original. Your recording never leaves your computer.",
   },
   {
     title: "Study reminders",
@@ -2374,7 +2378,7 @@ const FEATURES = [
 /** Spec §3, row by row: [feature, Free, Premium]. */
 const PLAN_ROWS: [string, string, string][] = [
   ["Shortcuts, line navigation and the subtitle toggle", "Yes", "Yes"],
-  ["Voice shadowing", "Yes", "Yes"],
+  ["Voice shadowing (coming soon)", "Yes", "Yes"],
   ["Study reminders", "Yes", "Yes"],
   ["Study Log: browse, search, open and delete", "Yes", "Yes"],
   ["Save this line", "Yes", "Yes"],
@@ -2579,6 +2583,11 @@ export default function PrivacyPage() {
         <h2 className="text-2xl font-black">What we keep</h2>
         <ul className="mt-2 list-disc pl-6">
           <li>Your account: your email address and how you sign in (Google or an email link).</li>
+          <li>
+            While you're signed in: the IP address and browser of each sign-in, to keep your account secure. Signing out
+            removes them.
+          </li>
+          <li>If you sign in with Google: your name, profile picture and the sign-in tokens Google gives us.</li>
           <li>Your subscription status, which Stripe sends us.</li>
           <li>
             For each AI answer: when it was made, what kind it was, which AI model wrote it, and how many tokens it used.
@@ -2995,7 +3004,7 @@ describe("SignInForm", () => {
 
   it("has no em dashes", () => {
     render(<SignInForm next="/account" initialError="INVALID_TOKEN" client={fakeClient()} />);
-    expect(document.body.textContent).not.toMatch(/—/);
+    expect(document.body.textContent).not.toMatch(/\u2014/);
   });
 });
 ```
@@ -3643,7 +3652,7 @@ const send = () => fireEvent.click(screen.getByRole("button", { name: "Send" }))
 
 describe("GoodbyeForm", () => {
   it("posts the chosen reason and the trimmed comment as JSON, then thanks the learner", async () => {
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true }) as Response);
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => ({ ok: true }) as Response);
     vi.stubGlobal("fetch", fetchMock);
     render(<GoodbyeForm />);
     expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
@@ -3837,7 +3846,7 @@ export const metadata: Metadata = { title: "Sorry to see you go" };
 /** Opened by Chrome when LingoFlix is uninstalled (spec §7.7). */
 export default function GoodbyePage() {
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-12">
+    <div className="mx-auto w-full max-w-xl">
       <h1 className="text-3xl font-black tracking-tight">Sorry to see you go</h1>
       <p className="mt-2">If you have a moment, tell us why. It helps us make LingoFlix better.</p>
 
@@ -4098,8 +4107,9 @@ const isConnected = (response: unknown) =>
   typeof response === "object" && response !== null && (response as { ok?: unknown }).ok === true;
 
 /**
- * Hands the session token to the extension with `chrome.runtime.sendMessage`. The token is never rendered,
- * logged or put in a URL.
+ * Hands the session token to the extension with `chrome.runtime.sendMessage`. The token is never shown on screen,
+ * logged or put in a URL. (Like any client-component prop it travels in the page's server-rendered data; the page is
+ * dynamic and never cached.)
  */
 export function ConnectClient({ extensionId, token, storeUrl, runtime, timeoutMs = 5000 }: ConnectClientProps) {
   const [state, setState] = useState<ConnectState>("connecting");
@@ -4134,6 +4144,7 @@ export function ConnectClient({ extensionId, token, storeUrl, runtime, timeoutMs
   }, [extensionId, runtime, timeoutMs, token]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- starting the hand-off on mount is this effect's purpose
     connect();
     return () => {
       attempt.current += 1;
@@ -4206,7 +4217,7 @@ export default async function ConnectPage() {
   if (!session) redirect("/sign-in?next=%2Fconnect");
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 py-12">
+    <div className="mx-auto w-full max-w-xl">
       <h1 className="text-3xl font-black tracking-tight">Connect LingoFlix</h1>
       <p className="mt-2">{`Signed in as ${session.user.email}.`}</p>
       <ConnectClient
@@ -4229,15 +4240,11 @@ Expected: PASS (8 + 3 = 11 tests).
 Run: `pnpm --filter lingoflix-server test && pnpm --filter lingoflix-server lint && pnpm --filter lingoflix-server compile && pnpm --filter lingoflix-server build`
 Expected:
 - Every test file passes, with no warnings in the output.
-- `eslint` reports no errors. Warnings for unused `_`-prefixed test parameters are acceptable.
+- `eslint` reports no errors and no warnings.
 - `tsc` prints nothing.
 - `next build` succeeds, and its route list includes `/goodbye`, `/connect` and `/api/goodbye`.
 
-If `eslint` reports `react-hooks/set-state-in-effect` on the `connect();` call inside `ConnectClient`'s `useEffect`, add this line directly above that call and run lint again. Starting the hand-off on mount, including showing "Install LingoFlix first" right away, is the effect's purpose. Moving it out of the effect would make the server-rendered HTML disagree with the browser's, because only the browser has `chrome.runtime`.
-
-```tsx
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- starting the hand-off on mount is this effect's purpose
-```
+The `eslint-disable-next-line react-hooks/set-state-in-effect` comment in `ConnectClient` is required (eslint-config-next 16.4.0 always reports that rule there). Starting the hand-off on mount, including showing "Install LingoFlix first" right away, is the effect's purpose. Moving it out of the effect would make the server-rendered HTML disagree with the browser's, because only the browser has `chrome.runtime`.
 
 - [ ] **Step 19: Commit**
 
@@ -4291,9 +4298,9 @@ BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
 # This site's origin.
 BETTER_AUTH_URL=http://localhost:3000
 
-# Google OAuth client (type: Web application). Leave empty to sign in by email link only.
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
+# Google OAuth client (type: Web application). Required; for email-link-only development any placeholder works.
+GOOGLE_CLIENT_ID=placeholder
+GOOGLE_CLIENT_SECRET=placeholder
 
 # The LingoFlix extension's ID, from the Chrome Web Store draft. Empty until then.
 EXTENSION_ID=
@@ -4351,8 +4358,8 @@ Run from the repository root with `pnpm --filter lingoflix-server <script>`, or 
 
 ## Local development
 
-1. Copy `.env.example` to `.env.local` and fill in what you have. Only the database and `BETTER_AUTH_SECRET` are
-   needed to sign in by email link.
+1. Copy `.env.example` to `.env.local` and fill in what you have. Only the database, `BETTER_AUTH_SECRET`,
+   `BETTER_AUTH_URL` and the Google values (placeholders are fine) are needed to sign in by email link.
 2. Without Cloudflare credentials (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_TOKEN`), sign-in links are printed to the
    terminal running `pnpm dev` instead of being emailed. This only happens outside production.
 3. Point `DATABASE_URL` and `DATABASE_URL_UNPOOLED` at a local Postgres or a Neon branch, then run
@@ -4403,7 +4410,7 @@ with
 pnpm build       # production builds (extension → lingoflix-extension/.output/chrome-mv3, server → lingoflix-server/.next)
 ```
 
-and under the existing line that points to `lingoflix-extension/README.md`, add:
+and under the existing line that points to `lingoflix-extension/README.md`, add a blank line and then:
 
 ```markdown
 See [`lingoflix-server/README.md`](./lingoflix-server/README.md) for running the website and API locally.
@@ -4479,7 +4486,7 @@ These steps create accounts and change outside services, so each one needs the u
 3. **Add Neon:** Vercel → Storage (Marketplace) → Neon → create a database and connect it to the project. Check that `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct) appear in the project's environment variables.
 4. **Better Auth secrets:**
    - Generate a secret with `pnpm --filter lingoflix-server exec auth secret` and set it as `BETTER_AUTH_SECRET` (Production and Preview).
-   - Set `BETTER_AUTH_URL=https://lingoflix.lipsum.fun` for Production only. Preview deployments leave it unset, so Better Auth uses each preview's own host.
+   - Set `BETTER_AUTH_URL=https://lingoflix.lipsum.fun` for Production. Sign-in works on a Preview deployment only if `BETTER_AUTH_URL` is also set for Preview (`getAuth()` requires it) and that host is added to the Google client; otherwise test sign-in locally.
 5. **Google sign-in:**
    1. Google Cloud Console → APIs & Services → OAuth consent screen: External, app name LingoFlix, support email, scopes `openid`, `email`, `profile`. While it is in Testing mode, add yourself as a test user.
    2. Credentials → Create OAuth client ID → Web application.
