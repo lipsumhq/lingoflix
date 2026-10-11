@@ -101,7 +101,7 @@ at `nextReminderTime(from, …)`; otherwise clear it. It runs:
 | `runtime.onStartup` (Chrome starts) | now |
 | The `reminders` key changes (`storage.onChanged`, area `local`) | now |
 | `permissions.onAdded` / `onRemoved` | now |
-| After the alarm fires | the alarm's `scheduledTime` + 60 s |
+| After the alarm fires | the later of now and the alarm's `scheduledTime` + 60 s (after days asleep, the next one is set from now, not a run of past-due alarms) |
 
 It does not run on every service-worker start, so it never replaces an alarm that is waking the worker.
 
@@ -181,7 +181,7 @@ Unit tests (Vitest), each written to fail first:
   the message; turning off stores `false` and removes the permission; the last day can't be turned off; Send a
   test sends `reminder:test` and shows the hint; shows off when the setting is on but the permission is missing.
 - **Background wiring:** `armReminder` on install, startup, settings change and permission change; re-arm after
-  firing from `scheduledTime` + 60 s; cleared when off; click opens the right URL and clears the notification;
+  firing from the later of now and `scheduledTime` + 60 s; cleared when off; click opens the right URL and clears the notification;
   `reminder:test` rejected from a content script.
 
 Live checklist:
