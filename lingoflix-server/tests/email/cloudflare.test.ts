@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CloudflareEmailError, sendEmail, type SendEmailInput } from "@/lib/email/cloudflare";
 
 interface Call {
@@ -11,6 +11,19 @@ function fakeFetch(status: number, body: string) {
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ url: String(input), init: init ?? {} });
     return new Response(body, { status, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  return { fetchFn, calls };
+}
+
+/** A fetch that never answers and fails only once its request is aborted, like a Cloudflare request that stalls. */
+function stalledFetch() {
+  const calls: Call[] = [];
+  const fetchFn = ((input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init: init ?? {} });
+    return new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
   }) as typeof fetch;
   return { fetchFn, calls };
 }
@@ -70,5 +83,25 @@ describe("sendEmail", () => {
     expect(error).toBeInstanceOf(CloudflareEmailError);
     expect((error as CloudflareEmailError).status).toBe(502);
     expect((error as CloudflareEmailError).errors).toEqual([]);
+  });
+});
+
+describe("sendEmail timeout", () => {
+  it("gives up on a request that stalls, so the sign-in form shows its error instead of waiting for minutes", { timeout: 2000 }, async () => {
+    const { fetchFn, calls } = stalledFetch();
+    const error = await sendEmail(INPUT, { accountId: "acc123", apiToken: "tok-1", fetch: fetchFn, timeoutMs: 20 }).catch(
+      (e: unknown) => e,
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.init.signal).toBeInstanceOf(AbortSignal);
+    expect(error).toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("waits 10 seconds for Cloudflare by default", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const { fetchFn, calls } = fakeFetch(200, JSON.stringify({ success: true, errors: [], messages: [], result: OK_RESULT }));
+    await sendEmail(INPUT, { accountId: "acc123", apiToken: "tok-1", fetch: fetchFn });
+    expect(timeout).toHaveBeenCalledExactlyOnceWith(10_000);
+    expect(calls[0]!.init.signal).toBe(timeout.mock.results[0]!.value);
   });
 });

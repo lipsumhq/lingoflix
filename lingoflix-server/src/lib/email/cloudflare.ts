@@ -45,9 +45,16 @@ export class CloudflareEmailError extends Error {
   }
 }
 
+/**
+ * How long a send may take, reading the answer included. Node's fetch would otherwise wait up to 300 s, and the
+ * learner would see "Sending..." for minutes instead of the sign-in form's error.
+ */
+export const SEND_TIMEOUT_MS = 10_000;
+
+/** Sends one email. A request that takes longer than `timeoutMs` (default SEND_TIMEOUT_MS) throws a TimeoutError. */
 export async function sendEmail(
   input: SendEmailInput,
-  opts: { accountId: string; apiToken: string; fetch?: typeof fetch },
+  opts: { accountId: string; apiToken: string; fetch?: typeof fetch; timeoutMs?: number },
 ): Promise<SendEmailResult> {
   const res = await (opts.fetch ?? fetch)(
     `https://api.cloudflare.com/client/v4/accounts/${opts.accountId}/email/sending/send`,
@@ -58,6 +65,7 @@ export async function sendEmail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(input),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? SEND_TIMEOUT_MS),
     },
   );
   let body: CloudflareEnvelope<SendEmailResult> | null = null;
