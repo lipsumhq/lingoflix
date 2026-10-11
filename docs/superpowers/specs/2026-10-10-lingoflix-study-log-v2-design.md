@@ -26,7 +26,7 @@ Study Log v2 turns the Study Log into the learner's own list:
 
 | Topic | Decision |
 |---|---|
-| Scope of this version | The list first: saving, the Study Log list, the detail view, export/import. Flashcards get their own design next. |
+| Scope of this version | The list first: saving, the Study Log list, the detail view, export/import. Flashcards were later dropped (study reminders spec §2). |
 | How items are picked | Claude suggests items (word, phrase, idiom, whole line); the learner taps Save. No manual text selection. |
 | Auto-save | Only what the learner saves appears in the Study Log. Every explanation is kept automatically as history and reused when the same line is explained again. |
 | Context for Claude | Both the story so far and the learning history. |
@@ -398,8 +398,9 @@ everything.
 
 ## 11. Out of scope
 
-Flashcards and other study modes (next design), spaced repetition, reminders/notifications, Quizlet export, the
-Stripe subscription, editing an item's text or meaning, manual text selection on Netflix.
+Flashcards and other study modes (dropped: study reminders spec §2), spaced repetition, reminders/notifications
+(later added: study reminders spec), Quizlet export, the Stripe subscription, editing an item's text or meaning,
+manual text selection on Netflix.
 
 ## 12. Main spec sections this replaces or amends
 

@@ -172,6 +172,8 @@ Mechanics:
 
 > Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
 
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-reminders-design.md` (study reminders), which wins where they disagree.
+
 Two tabs plus one hidden route. Layout (§5.10): a top bar with the logo and pill tabs; a main column; a right rail with a "Try this" study tip (one of a few, picked on each open; tips name actions, not keys) and the donation card. Below 1024 px wide the rail moves under the main column. "Not affiliated with or endorsed by Netflix." sits under the main column.
 
 **Settings tab:**
@@ -216,6 +218,8 @@ Benchmarked on Duolingo's qualities — friendly, chunky, bright, encouraging �
 
 ### 6.2 Components
 
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-reminders-design.md` (study reminders), which wins where they disagree.
+
 | Component | Runs in | Responsibility | Depends on |
 |---|---|---|---|
 | **Page bridge** (`netflix-bridge.content.ts`) | Netflix page, MAIN world, `document_start` | Netflix player API calls (seek, play, pause, current time, current text track); captures subtitle file URLs and title metadata from Netflix's manifest/metadata responses | `window.netflix` internals |
@@ -231,6 +235,8 @@ Pure logic lives in `src/lib/` with no Chrome or DOM dependencies where possible
 
 > Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
 
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-reminders-design.md` (study reminders), which wins where they disagree.
+
 - **Overlay ↔ page bridge:** `CustomEvent`s on `document` with a LingoFlix-specific event name, request/response correlated by id. Bridge requests: `seek(ms)`, `play()`, `pause()`, `getState()` → `{ currentTimeMs, paused, videoId, textTrack }`, `getSubtitleSource()` → `{ videoId, trackId, language, url }`, `getTitle()` → title metadata. (Pulled on demand rather than pushed as events, so nothing is missed before the overlay listens; answers are shape-checked because they come from the page.) All bridge times are episode time — the clock Netflix's `seek()` takes (`getSegmentTime()`), which can differ from `getCurrentTime()` by a lead-in (`docs/netflix-internals.md`, "Two clocks").
 - **Overlay ↔ background (explanations):** a `chrome.runtime` Port named `explain`, one per request. Overlay sends `{ type: "start", request }` or `{ type: "follow-up", entryId, question, sections }`; the background rebuilds the conversation from the saved entry. Background sends `{ type: "delta", text }`, `{ type: "done", entry }` (the saved Study Log entry), `{ type: "error", code, message }`. Disconnecting the port aborts the request.
 - **Overlay ↔ background (other):** `chrome.runtime.sendMessage` for Study Log lookup, shadowing commands (`start`, `stop`, `play`, `discard`, forwarded to the offscreen document), and opening the options page.
@@ -238,6 +244,8 @@ Pure logic lives in `src/lib/` with no Chrome or DOM dependencies where possible
 ### 6.4 Storage
 
 > Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
+
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-reminders-design.md` (study reminders), which wins where they disagree.
 
 | Data | Area | Notes |
 |---|---|---|
@@ -344,11 +352,14 @@ If any check fails, the affected behavior uses the fallback already defined abov
 
 ## 10. Privacy and permissions
 
-- **Permissions:** `storage`, `unlimitedStorage`, `offscreen`; host permissions `https://www.netflix.com/*` and `https://api.anthropic.com/*`. Microphone access is a runtime prompt on the extension's own page.
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-reminders-design.md` (study reminders), which wins where they disagree.
+
+- **Permissions:** `storage`, `unlimitedStorage`, `offscreen`, `alarms`; optional `notifications` (requested when study reminders are turned on); host permissions `https://www.netflix.com/*` and `https://api.anthropic.com/*`. Microphone access is a runtime prompt on the extension's own page.
 - The API key is stored in `chrome.storage.local`, read only by the background worker, and sent only to `api.anthropic.com`.
 - Subtitle text, surrounding dialogue, title info, the episode's earlier subtitle lines (setting "Send the story so far", on by default), and a learning history (up to 100 recent saved items and 30 explained lines, with the show and episode each is from) are sent to Anthropic only when the user requests an explanation or follow-up.
 - Voice recordings exist only in memory and are discarded immediately.
 - No analytics, no LingoFlix server. Study Log is stored locally only.
+- Study reminders, when turned on, keep the date the learner last watched and that show's id and title on this computer only.
 - A privacy policy page (hosted on `jaycho1214.github.io`) states the above for the Chrome Web Store listing.
 
 ## 11. Testing
