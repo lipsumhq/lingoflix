@@ -17,9 +17,9 @@ studying languages with Netflix:
 
 LingoFlix uses your own Claude API key (you pay Anthropic directly for what you use). The key and
 your Study Log stay on your computer. Only when you ask for an explanation or a follow-up does
-LingoFlix send Anthropic the line, the dialogue around it, the episode's earlier subtitle lines (you
-can turn this off in Settings), and a short list of what you've saved and explained before, so
-Claude can build on it.
+LingoFlix send Anthropic the line, the show and episode it's from, the dialogue around it, the
+episode's earlier subtitle lines (you can turn this off in Settings), and a list of your recent
+saved items and explained lines (with the show and episode each is from), so Claude can build on it.
 
 Not affiliated with or endorsed by Netflix.
 

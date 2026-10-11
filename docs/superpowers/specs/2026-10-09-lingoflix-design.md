@@ -170,6 +170,8 @@ Mechanics:
 
 ### 5.8 Options page
 
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
+
 Two tabs plus one hidden route. Layout (§5.10): a top bar with the logo and pill tabs; a main column; a right rail with a "Try this" study tip (one of a few, picked on each open; tips name actions, not keys) and the donation card. Below 1024 px wide the rail moves under the main column. "Not affiliated with or endorsed by Netflix." sits under the main column.
 
 **Settings tab:**
@@ -227,11 +229,15 @@ Pure logic lives in `src/lib/` with no Chrome or DOM dependencies where possible
 
 ### 6.3 Messaging
 
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
+
 - **Overlay ↔ page bridge:** `CustomEvent`s on `document` with a LingoFlix-specific event name, request/response correlated by id. Bridge requests: `seek(ms)`, `play()`, `pause()`, `getState()` → `{ currentTimeMs, paused, videoId, textTrack }`, `getSubtitleSource()` → `{ videoId, trackId, language, url }`, `getTitle()` → title metadata. (Pulled on demand rather than pushed as events, so nothing is missed before the overlay listens; answers are shape-checked because they come from the page.) All bridge times are episode time — the clock Netflix's `seek()` takes (`getSegmentTime()`), which can differ from `getCurrentTime()` by a lead-in (`docs/netflix-internals.md`, "Two clocks").
 - **Overlay ↔ background (explanations):** a `chrome.runtime` Port named `explain`, one per request. Overlay sends `{ type: "start", request }` or `{ type: "follow-up", entryId, question, sections }`; the background rebuilds the conversation from the saved entry. Background sends `{ type: "delta", text }`, `{ type: "done", entry }` (the saved Study Log entry), `{ type: "error", code, message }`. Disconnecting the port aborts the request.
 - **Overlay ↔ background (other):** `chrome.runtime.sendMessage` for Study Log lookup, shadowing commands (`start`, `stop`, `play`, `discard`, forwarded to the offscreen document), and opening the options page.
 
 ### 6.4 Storage
+
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
 
 | Data | Area | Notes |
 |---|---|---|
@@ -244,6 +250,8 @@ Settings are read through one typed module that fills defaults for missing field
 ## 7. Claude integration
 
 ### 7.1 Model and limits
+
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
 
 - Model: `claude-sonnet-5-5` (single constant in `src/lib/config.ts`).
 - `max_tokens`: 1024 for explanations and follow-ups. Streaming always on.
@@ -267,6 +275,8 @@ Dialogue (the line to explain is marked with >>>):
 ```
 
 ### 7.3 Follow-up request
+
+> Changed by `docs/superpowers/specs/2026-10-10-lingoflix-study-log-v2-design.md` (Study Log v2), which wins where they disagree.
 
 Same system prompt with an added instruction to answer the learner's question directly and briefly; messages are `[user: initial request, assistant: explanation, user: q1, assistant: a1, …, user: new question]`.
 
@@ -336,9 +346,9 @@ If any check fails, the affected behavior uses the fallback already defined abov
 
 - **Permissions:** `storage`, `unlimitedStorage`, `offscreen`; host permissions `https://www.netflix.com/*` and `https://api.anthropic.com/*`. Microphone access is a runtime prompt on the extension's own page.
 - The API key is stored in `chrome.storage.local`, read only by the background worker, and sent only to `api.anthropic.com`.
-- Subtitle text, surrounding dialogue, title info, the episode's earlier subtitle lines (setting "Send the story so far", on by default), and a short learning history (recent saved items and explained lines) are sent to Anthropic only when the user requests an explanation or follow-up.
+- Subtitle text, surrounding dialogue, title info, the episode's earlier subtitle lines (setting "Send the story so far", on by default), and a learning history (up to 100 recent saved items and 30 explained lines, with the show and episode each is from) are sent to Anthropic only when the user requests an explanation or follow-up.
 - Voice recordings exist only in memory and are discarded immediately.
-- No analytics, no LingoFlix server. Study Log is local only.
+- No analytics, no LingoFlix server. Study Log is stored locally only.
 - A privacy policy page (hosted on `jaycho1214.github.io`) states the above for the Chrome Web Store listing.
 
 ## 11. Testing

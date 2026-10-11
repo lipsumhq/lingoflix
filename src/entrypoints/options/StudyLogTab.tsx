@@ -48,6 +48,10 @@ interface Loaded {
 const NO_ITEMS: SavedItem[] = [];
 const KEEP_HISTORY = 'Explanations stay in your history.';
 
+/** "All 3 saved items from this show will be removed. …", or "The 1 saved item from …" for one. */
+const removedFrom = (count: number, place: string) =>
+  `${count === 1 ? 'The' : 'All'} ${savedItemsLabel(count)} from ${place} will be removed. ${KEEP_HISTORY}`;
+
 /** All items first, then episodes in tree order, then movies: what the list can show. */
 function selectable(tree: Tree, all: readonly SavedItem[]): Selectable[] {
   const everything: Selectable = {
@@ -299,14 +303,14 @@ export function StudyLogTab({
             onDeleteSeries={(series) =>
               confirmDelete(
                 `Delete ${series.title}?`,
-                `All ${savedItemsLabel(series.count)} from this show will be removed. ${KEEP_HISTORY}`,
+                removedFrom(series.count, 'this show'),
                 series.seasons.flatMap((s) => s.episodes.flatMap((e) => e.items.map((i) => i.id))),
               )
             }
             onDeleteSeason={(series, season) =>
               confirmDelete(
                 `Delete ${series.title} ${seasonLabel(season.seasonNumber)}?`,
-                `All ${savedItemsLabel(season.count)} from this season will be removed. ${KEEP_HISTORY}`,
+                removedFrom(season.count, 'this season'),
                 season.episodes.flatMap((e) => e.items.map((i) => i.id)),
               )
             }
@@ -327,7 +331,7 @@ export function StudyLogTab({
                 onDeleteAll={() =>
                   confirmDelete(
                     `${current.deleteLabel}?`,
-                    `All ${savedItemsLabel(current.items.length)} from ${current.place} will be removed. ${KEEP_HISTORY}`,
+                    removedFrom(current.items.length, current.place),
                     current.items.map((i) => i.id),
                   )
                 }

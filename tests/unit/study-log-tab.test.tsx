@@ -205,6 +205,44 @@ describe('Study Log tab', () => {
     expect(await rowTexts()).toEqual(['Movie line']);
   });
 
+  it('a delete confirmation for one saved item starts with The, not All', async () => {
+    await seed();
+    const DARK = { phrase: 'Dark line', videoId: '80100172', seriesId: '80100172', seriesTitle: 'Dark', episodeNumber: 1, episodeTitle: 'Secrets' };
+    await save(DARK, { type: 'word', text: 'Dark', meaning: 'without light' }, '2026-10-10T12:00:00Z');
+    render(<StudyLogTab />);
+    await tree();
+    const confirmation = async (open: () => void, title: string, body: string) => {
+      open();
+      const dialog = await screen.findByRole('alertdialog', { name: title });
+      expect(within(dialog).getByText(body)).toBeTruthy();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    };
+    const keep = 'Explanations stay in your history.';
+    await confirmation(
+      () => fireEvent.click(screen.getByRole('button', { name: 'Delete Dark' })),
+      'Delete Dark?',
+      `The 1 saved item from this show will be removed. ${keep}`,
+    );
+    await confirmation(
+      () => fireEvent.click(screen.getByRole('button', { name: 'Delete Dark Season 1' })),
+      'Delete Dark Season 1?',
+      `The 1 saved item from this season will be removed. ${keep}`,
+    );
+    fireEvent.click(within(await tree()).getByRole('button', { name: 'E1 · The Vanishing of Will Byers, 1 saved item' }));
+    await confirmation(
+      () => fireEvent.click(screen.getByRole('button', { name: 'Delete episode' })),
+      'Delete episode?',
+      `The 1 saved item from this episode will be removed. ${keep}`,
+    );
+    fireEvent.click(within(await tree()).getByRole('button', { name: 'Roma, 1 saved item' }));
+    await confirmation(
+      () => fireEvent.click(screen.getByRole('button', { name: 'Delete movie' })),
+      'Delete movie?',
+      `The 1 saved item from this movie will be removed. ${keep}`,
+    );
+    expect(await listItems()).toHaveLength(6);
+  });
+
   it('Reset all clears saved items and explanation history after confirming', async () => {
     await seed();
     render(<StudyLogTab />);

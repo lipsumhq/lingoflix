@@ -82,8 +82,9 @@ its index key.
 ### 3.3 One-time conversion of existing data
 
 The first time v2 runs (background `runtime.onInstalled` with reason `update`, and again lazily before the Study Log
-is listed if the marker is missing), every `log:` record without a matching item gets a saved item of type `line`
-(`text` = `line` = the phrase, `meaning` = `''`, `explanationId` = the record's id, other fields copied).
+is listed if the marker is missing), every `log:` record written before v2 (it has no stored `suggestions` field)
+gets a saved item of type `line` (`text` = `line` = the phrase, `meaning` = `''`, `explanationId` = the record's id,
+other fields copied).
 A marker key `migration:study-log-v2` = `true` records completion. Running it twice never creates duplicates
 (the item index makes it idempotent).
 
