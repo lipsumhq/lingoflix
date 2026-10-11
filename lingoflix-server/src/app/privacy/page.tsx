@@ -45,11 +45,7 @@ export default function PrivacyPage() {
         <h2 className="text-2xl font-black">What we keep</h2>
         <ul className="mt-2 list-disc pl-6">
           <li>Your account: your email address and how you sign in (Google or an email link).</li>
-          <li>
-            {
-              "While you're signed in: the IP address and browser of each sign-in, to keep your account secure. Signing out removes them."
-            }
-          </li>
+          <li>The IP address and browser of each sign-in, to keep your account secure. Signing out deletes them.</li>
           <li>If you sign in with Google: your name, profile picture and the sign-in tokens Google gives us.</li>
           <li>Your subscription status, which Stripe sends us.</li>
           <li>

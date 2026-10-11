@@ -90,6 +90,12 @@ describe("privacy policy", () => {
     expect(screen.getByText("Last updated: October 10, 2026")).toBeTruthy();
     expect(screen.getByText(/Our server passes this to Anthropic to write the answer and does not keep it\./)).toBeTruthy();
     expect(screen.getByText(/Never the subtitle text, your questions or the answers\./)).toBeTruthy();
+    expect(
+      screen.getByText("The IP address and browser of each sign-in, to keep your account secure. Signing out deletes them."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("If you sign in with Google: your name, profile picture and the sign-in tokens Google gives us."),
+    ).toBeTruthy();
     for (const service of ["Anthropic", "Stripe", "Vercel", "Neon", "Cloudflare"]) {
       expect(screen.getByText(service, { selector: "strong" })).toBeTruthy();
     }
