@@ -16,5 +16,8 @@ export default defineConfig({
     // Reminders spec §7: asked for only when the learner turns reminders on.
     optional_permissions: ['notifications'],
     host_permissions: ['https://www.netflix.com/*', 'https://api.anthropic.com/*'],
+    // Premium spec §7.8: the Chrome Web Store item's public key, so every build (unpacked too) has the store's
+    // extension ID, gdgblbcjeocifdhjfbpjpkcphlfmaoll, which the website hands sessions to.
+    key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA+I0ka9EAb8zBfMzTGLviK2aBk0y6phAw7GpDexn/9A4rtMK3wBy8IVWgv+Vm2uk+xnNlUBDTYZX8rH5K12JDxTKqtMsXAYOLhankg7fJmAw25RrhI+7M36c2xHpX/Pr+qXRehGLPkBRDx+35jaBp1Gx013bG9Cgf3bNVuUmxhpR4eUdspVkj/CebCvtxLDZF6IQAuvd6S+ie2ZWK4+/37mAktgkSYMewgRXu+qr/ur0f7W24zXS3gRNnOpOHcSrgeWJGCVVWE/iC1R2LXCelsQWhvctxwrUDU3CAbGh4Xb2wPu5CU+f1/gTMBKCjWpi7owwC8Z3pKCgRATLo95BGAwIDAQAB',
   },
 });
