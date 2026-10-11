@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { primaryButton, secondaryButton } from "@/components/styles";
 import { authClient } from "@/lib/auth-client";
 
@@ -48,6 +48,21 @@ export function SignInForm({
   const [status, setStatus] = useState<Status>(() => initialStatus(initialError));
   const errorCallbackURL = `/sign-in?next=${encodeURIComponent(next)}`;
   const sending = status.kind === "sending";
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const showedConfirmation = useRef(false);
+
+  // The form (and its focused button) is swapped for the confirmation and back, so move focus with it:
+  // to the heading, which screen readers then read out, and back to the email field.
+  useEffect(() => {
+    if (status.kind === "sent") {
+      showedConfirmation.current = true;
+      headingRef.current?.focus();
+    } else if (showedConfirmation.current) {
+      showedConfirmation.current = false;
+      emailRef.current?.focus();
+    }
+  }, [status.kind]);
 
   async function sendLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,7 +90,9 @@ export function SignInForm({
   if (status.kind === "sent") {
     return (
       <div role="status" className="flex flex-col gap-3">
-        <h2 className="text-2xl font-black">Check your email</h2>
+        <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-black outline-none">
+          Check your email
+        </h2>
         <p>{`We sent a link to ${status.email}. It works once and expires in 15 minutes.`}</p>
         <button type="button" className={secondaryButton} onClick={() => setStatus({ kind: "idle" })}>
           Use a different email
@@ -100,6 +117,7 @@ export function SignInForm({
           Email
         </label>
         <input
+          ref={emailRef}
           id={emailId}
           type="email"
           required

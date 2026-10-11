@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SignInForm, type SignInClient } from "@/app/sign-in/SignInForm";
 
@@ -58,6 +58,22 @@ describe("SignInForm", () => {
     fireEvent.submit(emailForm());
     fireEvent.click(await screen.findByRole("button", { name: "Use a different email" }));
     expect(emailBox()).toBeTruthy();
+  });
+
+  it("moves focus to the confirmation heading once the link is sent, so screen readers announce it", async () => {
+    render(<SignInForm next="/account" initialError={null} client={fakeClient()} />);
+    fireEvent.change(emailBox(), { target: { value: "learner@example.com" } });
+    fireEvent.submit(emailForm());
+    const heading = await screen.findByRole("heading", { name: "Check your email" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
+  it("puts focus back in the email field after Use a different email", async () => {
+    render(<SignInForm next="/account" initialError={null} client={fakeClient()} />);
+    fireEvent.change(emailBox(), { target: { value: "learner@example.com" } });
+    fireEvent.submit(emailForm());
+    fireEvent.click(await screen.findByRole("button", { name: "Use a different email" }));
+    await waitFor(() => expect(document.activeElement).toBe(emailBox()));
   });
 
   it("explains an expired or used link and keeps the email field ready (Review Focus 2)", () => {
