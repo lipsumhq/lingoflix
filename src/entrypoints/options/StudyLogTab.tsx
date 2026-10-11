@@ -4,7 +4,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { buttonSecondary, card, iconTile } from '@/components/styles';
 import { useWideLayout } from '@/hooks/useWideLayout';
+import { downloadText } from '@/lib/download';
 import { setPendingSeek } from '@/lib/pending-seek';
+import { EXPORT_MIME, exportFileName, toAnki, toBackup, toCsv, type ExportKind } from '@/lib/study-log/export';
 import { filterItems, newestFirst, type TypeFilter } from '@/lib/study-log/filter';
 import { episodeLabel, savedItemsLabel, seasonLabel } from '@/lib/study-log/format';
 import { groupStudyLog, type StudyLogTree as Tree } from '@/lib/study-log/group';
@@ -12,6 +14,7 @@ import { deleteItems, listItems, migrateIfNeeded } from '@/lib/study-log/items';
 import { listExplanations, resetStudyLog, watchStudyLog } from '@/lib/study-log/store';
 import type { SavedItem } from '@/lib/study-log/types';
 import { StudyLogDetail } from './StudyLogDetail';
+import { StudyLogExportMenu } from './StudyLogExportMenu';
 import { StudyLogItems } from './StudyLogItems';
 import { StudyLogToolbar } from './StudyLogToolbar';
 import { ALL_ITEMS, StudyLogTree } from './StudyLogTree';
@@ -91,7 +94,13 @@ async function openInNetflix(item: SavedItem): Promise<void> {
 }
 
 /** v2 spec §6: the learner's saved words, phrases, idioms and lines, with a detail view. */
-export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (item: SavedItem) => Promise<void> } = {}) {
+export function StudyLogTab({
+  openAtMoment = openInNetflix,
+  download = downloadText,
+}: {
+  openAtMoment?: (item: SavedItem) => Promise<void>;
+  download?: (fileName: string, text: string, mimeType: string) => void;
+} = {}) {
   const [data, setData] = useState<Loaded | null>(null);
   const [selected, setSelected] = useState<string>(ALL_ITEMS);
   const [type, setType] = useState<TypeFilter>('all');
@@ -176,6 +185,19 @@ export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (
 
   if (data === null) return <p className="text-sm font-semibold text-mute">Loading…</p>;
 
+  const hasItems = items.length > 0;
+
+  const exportAs = async (kind: ExportKind) => {
+    const now = new Date();
+    const text = kind === 'anki' ? toAnki(visible) : kind === 'csv' ? toCsv(visible) : toBackup(await listItems(), await listExplanations(), now);
+    download(exportFileName(kind, now), text, EXPORT_MIME[kind]);
+  };
+
+  // Full backup also covers explanation history, which exists even with no saved items (v2 spec §7.3).
+  const exportMenu = (
+    <StudyLogExportMenu canExportView={visible.length > 0} canBackup={hasItems || data.historyCount > 0} onExport={(kind) => void exportAs(kind)} />
+  );
+
   const detail = selectedItem && (
     <StudyLogDetail
       key={selectedItem.id}
@@ -194,23 +216,26 @@ export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (
           <h1 className="text-[28px] font-black tracking-tight">Study Log</h1>
           <p className="mt-1 text-[15px] font-semibold text-mute">Words, phrases, idioms and lines you saved.</p>
         </div>
-        {items.length + data.historyCount > 0 && (
-          <button
-            type="button"
-            className={buttonSecondary}
-            onClick={() =>
-              setPending({
-                title: 'Reset your Study Log?',
-                body: "Every saved item and every explanation in your history will be removed. This can't be undone.",
-                confirmLabel: 'Reset all',
-                run: resetStudyLog,
-              })
-            }
-          >
-            <RotateCcw size={14} strokeWidth={3} aria-hidden />
-            Reset all
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {!hasItems && exportMenu}
+          {items.length + data.historyCount > 0 && (
+            <button
+              type="button"
+              className={buttonSecondary}
+              onClick={() =>
+                setPending({
+                  title: 'Reset your Study Log?',
+                  body: "Every saved item and every explanation in your history will be removed. This can't be undone.",
+                  confirmLabel: 'Reset all',
+                  run: resetStudyLog,
+                })
+              }
+            >
+              <RotateCcw size={14} strokeWidth={3} aria-hidden />
+              Reset all
+            </button>
+          )}
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -256,7 +281,7 @@ export function StudyLogTab({ openAtMoment = openInNetflix }: { openAtMoment?: (
             detail
           ) : (
             <div className="flex min-w-0 flex-col gap-4">
-              <StudyLogToolbar type={type} onTypeChange={setType} query={query} onQueryChange={setQuery} />
+              <StudyLogToolbar type={type} onTypeChange={setType} query={query} onQueryChange={setQuery} actions={exportMenu} />
               <StudyLogItems
                 heading={current.heading}
                 subheading={current.subheading}
