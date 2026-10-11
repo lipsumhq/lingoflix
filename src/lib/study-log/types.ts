@@ -75,6 +75,8 @@ export function toExplanation(value: unknown): Explanation | null {
     Array.isArray(v.followUps) &&
     v.followUps.every(isFollowUp) &&
     typeof v.videoTimeMs === 'number' &&
+    Number.isFinite(v.videoTimeMs) &&
+    v.videoTimeMs >= 0 &&
     typeof v.savedAt === 'string' &&
     typeof v.updatedAt === 'string' &&
     typeof v.videoId === 'string' &&

@@ -97,6 +97,18 @@ describe('importBackup', () => {
     expect(await fakeBrowser.storage.local.get(null)).toEqual(before);
   });
 
+  it('a newer backup is newer-version even when its arrays are not the ones this version knows', async () => {
+    const before = await fakeBrowser.storage.local.get(null);
+    expect(await importBackup(JSON.stringify({ format: 'lingoflix-backup', version: 2, entries: [] }))).toEqual({
+      ok: false,
+      error: 'newer-version',
+    });
+    expect(await importBackup(JSON.stringify({ format: 'lingoflix-backup', version: 3 }))).toEqual({ ok: false, error: 'newer-version' });
+    // The format is checked first: a file of another format is never newer-version.
+    expect(await importBackup(JSON.stringify({ format: 'other', version: 2, entries: [] }))).toEqual({ ok: false, error: 'not-backup' });
+    expect(await fakeBrowser.storage.local.get(null)).toEqual(before);
+  });
+
   it('adds a backup to an empty Study Log, index keys included', async () => {
     const result = await importBackup(toBackup([savedItem()], [explanation()], new Date('2026-10-10T21:41:00Z')));
     expect(result).toEqual({ ok: true, summary: { itemsAdded: 1, explanationsAdded: 1, skipped: 0, invalid: 0 } });
@@ -168,6 +180,34 @@ describe('importBackup', () => {
   it('stores only the saved-item fields', async () => {
     await importBackup(backupFile([{ ...savedItem(), note: '<script>' }], [explanation()]));
     expect(await getItem('i1')).toEqual(savedItem());
+  });
+
+  it('stores only the explanation fields, inside follow-ups, context and suggestions too', async () => {
+    const clean = explanation({ followUps: [{ question: 'Formal?', answer: 'No.' }] });
+    const extra = {
+      ...clean,
+      note: '<script>',
+      followUps: [{ question: 'Formal?', answer: 'No.', html: '<b>' }],
+      context: { ...clean.context, speaker: 'Hopper' },
+      suggestions: [{ ...clean.suggestions[0]!, score: 9 }],
+    };
+    expect(await importBackup(backupFile([], [extra]))).toEqual({
+      ok: true,
+      summary: { itemsAdded: 0, explanationsAdded: 1, skipped: 0, invalid: 0 },
+    });
+    expect((await fakeBrowser.storage.local.get('log:e1'))['log:e1']).toEqual(clean);
+  });
+
+  it('counts an explanation whose time is not a finite number of ms at or after 0 as unreadable', async () => {
+    // JSON has no Infinity: 1e400 parses as Infinity.
+    const text = backupFile([], [explanation({ videoTimeMs: 123_456_789 })]).replace('123456789', '1e400');
+    expect(JSON.parse(text).explanations[0].videoTimeMs).toBe(Number.POSITIVE_INFINITY);
+    expect(await importBackup(text)).toEqual({ ok: true, summary: { itemsAdded: 0, explanationsAdded: 0, skipped: 0, invalid: 1 } });
+    expect(await importBackup(backupFile([], [explanation({ videoTimeMs: -1 })]))).toEqual({
+      ok: true,
+      summary: { itemsAdded: 0, explanationsAdded: 0, skipped: 0, invalid: 1 },
+    });
+    expect(await listExplanations()).toEqual([]);
   });
 });
 

@@ -171,7 +171,11 @@ describe('explanation records (v2 spec §3.1)', () => {
     }
   });
 
-  it('rejects a record whose source fields or model have the wrong type', () => {
+  it('reads a time of 0 ms (the first frame)', () => {
+    expect(toExplanation(stored({ videoTimeMs: 0 }))?.videoTimeMs).toBe(0);
+  });
+
+  it('rejects a record whose source fields, model or time have the wrong type', () => {
     const wrong: Record<string, unknown>[] = [
       { seriesId: 80057281 },
       { seriesId: undefined },
@@ -185,6 +189,11 @@ describe('explanation records (v2 spec §3.1)', () => {
       { model: null },
       { model: 5 },
       { model: undefined },
+      { videoTimeMs: Number.POSITIVE_INFINITY },
+      { videoTimeMs: Number.NEGATIVE_INFINITY },
+      { videoTimeMs: Number.NaN },
+      { videoTimeMs: -1 },
+      { videoTimeMs: '1000' },
     ];
     for (const over of wrong) {
       const label = Object.entries(over).map(([field, value]) => `${field}: ${String(value)}`).join();

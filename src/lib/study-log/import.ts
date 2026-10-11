@@ -49,6 +49,30 @@ function pickItem(item: SavedItem): SavedItem {
   };
 }
 
+/** Only the Explanation fields, inside follow-ups, context and suggestions too: as `pickItem`. */
+function pickExplanation(explanation: Explanation): Explanation {
+  return {
+    id: explanation.id,
+    phrase: explanation.phrase,
+    response: explanation.response,
+    followUps: explanation.followUps.map((f) => ({ question: f.question, answer: f.answer })),
+    videoTimeMs: explanation.videoTimeMs,
+    savedAt: explanation.savedAt,
+    updatedAt: explanation.updatedAt,
+    videoId: explanation.videoId,
+    kind: explanation.kind,
+    seriesId: explanation.seriesId,
+    seriesTitle: explanation.seriesTitle,
+    seasonNumber: explanation.seasonNumber,
+    episodeNumber: explanation.episodeNumber,
+    episodeTitle: explanation.episodeTitle,
+    context: { before: explanation.context.before, after: explanation.context.after },
+    explanationLanguage: explanation.explanationLanguage,
+    model: explanation.model,
+    suggestions: explanation.suggestions.map((s) => ({ type: s.type, text: s.text, meaning: s.meaning })),
+  };
+}
+
 const explanationKeys = (e: Explanation) => [`${EXPLANATION_PREFIX}${e.id}`, explanationIndexKey(e.videoId, e.explanationLanguage, e.phrase)] as const;
 const itemKeys = (i: SavedItem) => [`${ITEM_PREFIX}${i.id}`, itemIndexKey(i.videoId, i.line, i.type, i.text)] as const;
 
@@ -63,18 +87,18 @@ export async function importBackup(text: string): Promise<ImportResult> {
   } catch {
     return { ok: false, error: 'not-backup' };
   }
-  if (!isRecord(data) || data.format !== BACKUP_FORMAT || !Array.isArray(data.items) || !Array.isArray(data.explanations)) {
-    return { ok: false, error: 'not-backup' };
-  }
+  // The format, then the version: a newer backup may hold arrays this version doesn't know.
+  if (!isRecord(data) || data.format !== BACKUP_FORMAT) return { ok: false, error: 'not-backup' };
   const { version } = data;
   if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return { ok: false, error: 'not-backup' };
   if (version > BACKUP_VERSION) return { ok: false, error: 'newer-version' };
+  if (!Array.isArray(data.items) || !Array.isArray(data.explanations)) return { ok: false, error: 'not-backup' };
 
   let invalid = 0;
   const explanations: Explanation[] = [];
   for (const raw of data.explanations) {
     const explanation = toExplanation(raw);
-    if (explanation) explanations.push(explanation);
+    if (explanation) explanations.push(pickExplanation(explanation));
     else invalid++;
   }
   const items: SavedItem[] = [];
