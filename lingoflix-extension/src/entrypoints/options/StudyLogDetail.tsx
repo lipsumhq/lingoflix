@@ -163,9 +163,9 @@ export function StudyLogDetail({ item, narrow, onClose, onDelete, onOpenAtMoment
         </ol>
       </Collapsible>
 
-      <Collapsible label="Claude's explanation" defaultOpen={item.meaning === ''}>
+      <Collapsible label="Explanation" defaultOpen={item.meaning === ''}>
         {explanation === undefined && <p className="text-sm font-semibold text-mute">Loading…</p>}
-        {explanation === null && <p className="text-sm font-semibold text-mute">Claude's explanation isn't available for this item.</p>}
+        {explanation === null && <p className="text-sm font-semibold text-mute">The explanation isn't available for this item.</p>}
         {explanation && (
           <>
             <Markdown>{explanation.response}</Markdown>

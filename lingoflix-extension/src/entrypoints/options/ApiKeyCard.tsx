@@ -1,19 +1,21 @@
 import { Eye, EyeOff, KeyRound, Trash2, Zap } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { buttonSecondary, card, focusRing, iconTile } from '@/components/styles';
-import { NOT_A_KEY } from '@/lib/ai/provider';
-import { ANTHROPIC_KEYS_URL } from '@/lib/config';
+import { NOT_A_KEY, PROVIDERS, type Provider } from '@/lib/ai/provider';
 import { sendToBackground } from '@/lib/messages';
 
 export type Send = typeof sendToBackground;
 
-type KeyStatus = { set: boolean; masked: string | null } | 'unknown' | null;
+type KeyStatus = { set: boolean; masked: string | null; provider: Provider | null } | 'unknown' | null;
 type Note = { tone: 'good' | 'bad' | 'info'; text: string };
 
 const NOTE_COLOR: Record<Note['tone'], string> = { good: 'text-tint-ink', bad: 'text-danger', info: 'text-mute' };
 const UNREACHABLE: Note = { tone: 'bad', text: "Couldn't reach LingoFlix's background. Try again." };
 
-/** Spec §5.8: the key goes to the background worker; this page only ever sees whether one is set (masked). */
+/**
+ * Free-own-key spec §3.3: the key goes to the background worker; this page only ever sees whether one is set
+ * (masked) and whose it is.
+ */
 export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
   const [status, setStatus] = useState<KeyStatus>(null);
   const [draft, setDraft] = useState('');
@@ -75,6 +77,11 @@ export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
   };
 
   const saved = typeof status === 'object' && status?.set === true;
+  const keyLink = (provider: Provider) => (
+    <a href={PROVIDERS[provider].keysUrl} target="_blank" rel="noopener noreferrer" className={`underline ${focusRing}`}>
+      {PROVIDERS[provider].console}
+    </a>
+  );
 
   return (
     <section className={`${card} px-5 py-4`}>
@@ -84,14 +91,11 @@ export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-[19px] font-black">
-            Claude API key
+            API key
           </h2>
           <p className="mt-0.5 text-sm font-semibold text-mute">
-            LingoFlix asks Claude with your own key. Create one at{' '}
-            <a href={ANTHROPIC_KEYS_URL} target="_blank" rel="noopener noreferrer" className={`underline ${focusRing}`}>
-              console.anthropic.com
-            </a>
-            . Usage is billed to your Anthropic account. The key stays on this computer and is sent only to Anthropic.
+            LingoFlix explains lines with your own Claude or OpenAI key. Get one at {keyLink('claude')} or {keyLink('openai')}. Usage
+            is billed to that account. The key stays on this computer and is sent only to Anthropic or OpenAI.
           </p>
         </div>
       </div>
@@ -102,7 +106,8 @@ export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
         {typeof status === 'object' && status !== null && !status.set && 'No key saved yet.'}
         {saved && (
           <>
-            Saved key: <code className="rounded bg-soft px-1.5 py-0.5 text-[13px]">{(status as { masked: string }).masked}</code>
+            {status.provider ? `${PROVIDERS[status.provider].name} key` : 'Saved key'}:{' '}
+            <code className="rounded bg-soft px-1.5 py-0.5 text-[13px]">{status.masked}</code>
           </>
         )}
       </p>
@@ -111,8 +116,8 @@ export function ApiKeyCard({ send = sendToBackground }: { send?: Send }) {
         <div className="relative min-w-56 flex-1">
           <input
             type={show ? 'text' : 'password'}
-            aria-label="Claude API key"
-            placeholder={saved ? 'Paste a new key to replace it' : 'sk-ant-…'}
+            aria-label="API key"
+            placeholder={saved ? 'Paste a new key to replace it' : 'sk-ant-… or sk-…'}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             autoComplete="off"

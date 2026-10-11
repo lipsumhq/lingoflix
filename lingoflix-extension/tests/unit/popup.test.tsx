@@ -17,12 +17,12 @@ afterEach(() => {
   document.documentElement.removeAttribute(THEME_ATTR);
 });
 
-const send = (set: boolean) =>
-  vi.fn(async () => ({ set, masked: set ? 'sk-ant-…1234' : null })) as unknown as typeof sendToBackground;
+const send = (provider: 'claude' | 'openai' | null) =>
+  vi.fn(async () => ({ set: provider !== null, masked: provider ? 'sk-…1234' : null, provider })) as unknown as typeof sendToBackground;
 
 describe('popup', () => {
   it('says "You\'re all set!" when on and "Taking a break" after switching off', async () => {
-    render(<App send={send(true)} />);
+    render(<App send={send('claude')} />);
     const sw = await screen.findByRole('switch', { name: 'Enabled' });
     expect(sw.textContent).toContain("You're all set!");
     fireEvent.click(sw);
@@ -32,30 +32,33 @@ describe('popup', () => {
 
   it('opens Settings', async () => {
     const open = vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockResolvedValue();
-    render(<App send={send(true)} />);
+    render(<App send={send('claude')} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     expect(open).toHaveBeenCalled();
   });
 
   it('uses the saved appearance', async () => {
     await saveSettings({ ...DEFAULT_SETTINGS, theme: 'dark' });
-    render(<App send={send(true)} />);
+    render(<App send={send('claude')} />);
     await waitFor(() => expect(document.documentElement.getAttribute(THEME_ATTR)).toBe('dark'));
   });
 
-  it('shows the key status and links to Settings when the key is missing', async () => {
+  it("shows which provider's key is set, and links to Settings when no key is (free-own-key spec §3.4)", async () => {
     const open = vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockResolvedValue();
-    render(<App send={send(false)} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Add your Claude API key' }));
+    render(<App send={send(null)} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add your API key' }));
     expect(open).toHaveBeenCalled();
     cleanup();
-    render(<App send={send(true)} />);
+    render(<App send={send('claude')} />);
     expect(await screen.findByText('Claude key set')).toBeTruthy();
+    cleanup();
+    render(<App send={send('openai')} />);
+    expect(await screen.findByText('OpenAI key set')).toBeTruthy();
   });
 
   it('toggles Pause on hover and opens the Study Log', async () => {
     const create = vi.spyOn(fakeBrowser.tabs, 'create');
-    render(<App send={send(true)} />);
+    render(<App send={send('claude')} />);
     fireEvent.click(await screen.findByRole('switch', { name: 'Pause on hover' }));
     await waitFor(async () => expect((await loadSettings()).pauseOnHover).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Study Log' }));

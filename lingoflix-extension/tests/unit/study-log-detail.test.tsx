@@ -146,9 +146,9 @@ describe('StudyLogDetail', () => {
     expect(rows[2]!.querySelectorAll('mark')).toHaveLength(2);
   });
 
-  it("loads Claude's explanation, collapsed when the item has a meaning", async () => {
+  it('loads the explanation, collapsed when the item has a meaning', async () => {
     const { loadExplanation } = renderDetail();
-    const toggle = screen.getByRole('button', { name: "Claude's explanation" });
+    const toggle = screen.getByRole('button', { name: 'Explanation' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(toggle);
     expect(await screen.findByRole('heading', { name: 'Meaning' })).toBeTruthy();
@@ -158,15 +158,15 @@ describe('StudyLogDetail', () => {
     expect(loadExplanation).toHaveBeenCalledWith('e1');
   });
 
-  it("opens Claude's explanation by default when there is no meaning, and says when it isn't available", async () => {
+  it("opens the explanation by default when there is no meaning, and says when it isn't available", async () => {
     const first = renderDetail({ meaning: '', explanationId: null });
-    expect(screen.getByRole('button', { name: "Claude's explanation" }).getAttribute('aria-expanded')).toBe('true');
-    expect(await screen.findByText("Claude's explanation isn't available for this item.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Explanation' }).getAttribute('aria-expanded')).toBe('true');
+    expect(await screen.findByText("The explanation isn't available for this item.")).toBeTruthy();
     expect(first.loadExplanation).not.toHaveBeenCalled();
     cleanup();
 
     renderDetail({ meaning: '' }, { explanation: null });
-    expect(await screen.findByText("Claude's explanation isn't available for this item.")).toBeTruthy();
+    expect(await screen.findByText("The explanation isn't available for this item.")).toBeTruthy();
   });
 
   it('Open at this moment, Delete and Close call back; Back replaces Close on a narrow window', () => {

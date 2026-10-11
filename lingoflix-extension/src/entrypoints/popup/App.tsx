@@ -7,23 +7,25 @@ import { Toggle } from '@/components/Toggle';
 import { buttonPrimary, buttonSecondary, card, focusRing } from '@/components/styles';
 import { useSettings } from '@/hooks/useSettings';
 import { useTheme } from '@/hooks/useTheme';
+import { PROVIDERS, type Provider } from '@/lib/ai/provider';
 import { sendToBackground } from '@/lib/messages';
 
 type Send = typeof sendToBackground;
 
+/** Free-own-key spec §3.4: whose key is set; a key that is neither Claude's nor OpenAI's counts as none. */
 function KeyStatus({ send }: { send: Send }) {
-  const [set, setSet] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<{ provider: Provider | null } | null>(null);
   useEffect(() => {
     send({ type: 'api-key:status' }).then(
-      (s) => setSet(s.set),
-      () => setSet(null),
+      (s) => setStatus({ provider: s.provider }),
+      () => setStatus(null),
     );
   }, [send]);
-  if (set === null) return null;
-  return set ? (
+  if (status === null) return null;
+  return status.provider ? (
     <p className="flex items-center gap-1.5 text-[13px] font-bold text-mute">
       <CheckCircle2 size={16} strokeWidth={2.5} className="text-tint-ink" aria-hidden />
-      Claude key set
+      {PROVIDERS[status.provider].name} key set
     </p>
   ) : (
     <button
@@ -32,7 +34,7 @@ function KeyStatus({ send }: { send: Send }) {
       className={`flex items-center gap-1.5 text-left text-[13px] font-extrabold text-danger underline-offset-2 hover:underline ${focusRing}`}
     >
       <AlertTriangle size={16} strokeWidth={2.5} aria-hidden />
-      Add your Claude API key
+      Add your API key
     </button>
   );
 }

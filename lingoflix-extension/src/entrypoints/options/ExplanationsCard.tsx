@@ -8,7 +8,7 @@ const SECTION_COPY: Record<keyof CardSections, { label: string; description: str
   meaning: { label: 'Meaning', description: 'Translation, tone, and nuance in this scene.' },
   keyExpressions: { label: 'Key expressions', description: 'Idioms and slang, each defined.' },
   howToUse: { label: 'How to use it', description: 'Everyday example sentences.' },
-  followUp: { label: 'Follow-up box', description: 'Ask Claude more about the line.' },
+  followUp: { label: 'Follow-up box', description: 'Ask more about the line.' },
 };
 
 interface ExplanationsCardProps {
@@ -33,7 +33,7 @@ export function ExplanationsCard({ settings, update }: ExplanationsCardProps) {
             Explain in
           </label>
           <p id={languageHint} className="text-[13px] font-semibold text-mute">
-            Claude answers in this language.
+            Explanations are written in this language.
           </p>
         </div>
         <select

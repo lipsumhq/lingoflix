@@ -16,5 +16,3 @@ export const OPENAI_MAX_OUTPUT_TOKENS = 8000;
 export const OPENAI_API_BASE_URL = 'https://api.openai.com/v1';
 /** Spec §7.4: a stream with no event this long is treated as a network failure (free-own-key spec §4.3). */
 export const AI_IDLE_TIMEOUT_MS = 30_000;
-/** Where users create an API key. */
-export const ANTHROPIC_KEYS_URL = 'https://console.anthropic.com/settings/keys';
