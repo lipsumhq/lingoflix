@@ -20,7 +20,10 @@ export interface AuthDeps {
   sendSignInEmail: (to: string, url: string) => Promise<void>;
   /** Tests only: seconds a sign-in link lasts (default MAGIC_LINK_EXPIRES_IN). */
   magicLinkExpiresIn?: number;
-  /** Tests only: Better Auth skips its Origin check under Vitest; false turns it back on. Unset in the app. */
+  /**
+   * Better Auth skips its Origin, CSRF and callback-URL checks when NODE_ENV is "test" or TEST is set; false keeps
+   * them on regardless (the app always passes false). Unset keeps Better Auth's default, which some tests want.
+   */
   disableOriginCheck?: boolean;
 }
 
@@ -56,6 +59,16 @@ export type Auth = ReturnType<typeof createAuth>;
 
 const REQUIRED_ENV = ["BETTER_AUTH_SECRET", "BETTER_AUTH_URL", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] as const;
 
+/**
+ * `EXTENSION_ID` becomes a trusted origin, where `*` and `?` are wildcards, so only a real Chrome extension ID
+ * (32 letters, a to p) is accepted. Empty or unset means no extension yet.
+ */
+function extensionIdFrom(value: string | undefined): string | null {
+  if (!value) return null;
+  if (!/^[a-p]{32}$/.test(value)) throw new Error("EXTENSION_ID must be a 32-letter Chrome extension ID (a to p)");
+  return value;
+}
+
 let cached: Auth | null = null;
 
 /** The app's Better Auth, built on first use (never at import, so builds and tests need no secrets). */
@@ -64,14 +77,17 @@ export function getAuth(): Auth {
   const env = process.env;
   const missing = REQUIRED_ENV.filter((name) => !env[name]);
   if (missing.length > 0) throw new Error(`Missing environment variables: ${missing.join(", ")}`);
+  const extensionId = extensionIdFrom(env.EXTENSION_ID);
   cached = createAuth({
     db: getDb(),
     secret: env.BETTER_AUTH_SECRET!,
     baseURL: env.BETTER_AUTH_URL!,
     googleClientId: env.GOOGLE_CLIENT_ID!,
     googleClientSecret: env.GOOGLE_CLIENT_SECRET!,
-    extensionId: env.EXTENSION_ID || null,
+    extensionId,
     sendSignInEmail: (to, url) => sendSignInEmail(to, url),
+    // Never left to Better Auth: a stray NODE_ENV=test or TEST variable in production would turn the checks off.
+    disableOriginCheck: false,
   });
   return cached;
 }
