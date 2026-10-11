@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { storage } from '#imports';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
@@ -116,6 +117,20 @@ describe('Reminders card', () => {
     await settle();
     expect(input.value).toBe('');
     expect((await loadReminders()).time).toBe('07:30');
+  });
+
+  it('a time left incomplete goes back to the stored one when the field loses focus', async () => {
+    await updateReminders((r) => ({ ...r, time: '07:30' }));
+    const before = await storage.getItem('local:reminders');
+    const { permission } = fakePermission();
+    render(<RemindersCard permission={permission} send={fakeSend(async () => ({ ok: true }))} />);
+    const input = (await screen.findByLabelText('Time')) as HTMLInputElement;
+    expect(input.value).toBe('07:30');
+    fireEvent.change(input, { target: { value: '' } });
+    expect(input.value).toBe('');
+    fireEvent.blur(input);
+    await waitFor(() => expect(input.value).toBe('07:30'));
+    expect(await storage.getItem('local:reminders')).toEqual(before);
   });
 
   it('days toggle, and the last one left cannot be turned off', async () => {

@@ -139,6 +139,10 @@ export function RemindersCard({ send = sendToBackground, permission = notificati
             setDraftTime(value);
             if (TIME_PATTERN.test(value)) save((r) => ({ ...r, time: value }));
           }}
+          onBlur={() => {
+            // Left incomplete: show the stored time again rather than a blank field.
+            if (!TIME_PATTERN.test(draftTime)) setDraftTime(reminders.time);
+          }}
           className="rounded-xl border-2 border-line bg-card px-3 py-2 text-sm font-bold text-ink outline-none focus:border-brand"
         />
       </div>
