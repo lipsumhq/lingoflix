@@ -157,6 +157,29 @@ describe("Google", () => {
     expect(google.hostname).toBe("accounts.google.com");
     expect(google.searchParams.get("redirect_uri")).toBe(`${TEST_BASE_URL}/api/auth/callback/google`);
   });
+
+  it("Better Auth's error page sends the learner to the sign-in page with the error code", async () => {
+    t = await createTestAuth();
+    const res = await t.auth.handler(new Request(`${TEST_BASE_URL}/api/auth/error?error=state_mismatch`));
+    expect(res.status).toBe(302);
+    const landed = redirectOf(res);
+    expect(landed.origin).toBe(TEST_BASE_URL);
+    expect(landed.pathname).toBe("/sign-in");
+    expect(landed.searchParams.get("error")).toBe("state_mismatch");
+  });
+
+  it("a Google callback whose state is unknown lands on the sign-in page with state_mismatch", async () => {
+    t = await createTestAuth();
+    // Better Auth logs the state it could not read with console.error; keep the expected one out of the test output.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await t.auth.handler(new Request(`${TEST_BASE_URL}/api/auth/callback/google?code=abc&state=unknown-state`));
+    expect(res.status).toBe(302);
+    const landed = redirectOf(res);
+    expect(landed.origin).toBe(TEST_BASE_URL);
+    expect(landed.pathname).toBe("/sign-in");
+    expect(landed.searchParams.get("error")).toBe("state_mismatch");
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining("Failed to parse state"), expect.anything());
+  });
 });
 
 describe("trusted origins", () => {

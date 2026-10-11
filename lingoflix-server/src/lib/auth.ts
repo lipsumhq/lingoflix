@@ -41,6 +41,9 @@ export function createAuth(deps: AuthDeps) {
       google: { clientId: deps.googleClientId, clientSecret: deps.googleClientSecret },
     },
     ...(deps.disableOriginCheck === undefined ? {} : { advanced: { disableOriginCheck: deps.disableOriginCheck } }),
+    // Google sign-in errors (and Better Auth's error page) land on /sign-in?error=<code>, which shows a message;
+    // otherwise production redirects them to /?error=<code>, which shows nothing.
+    onAPIError: { errorURL: "/sign-in" },
     plugins: [
       magicLink({
         expiresIn: deps.magicLinkExpiresIn ?? MAGIC_LINK_EXPIRES_IN,
