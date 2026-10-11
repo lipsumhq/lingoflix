@@ -17,6 +17,7 @@ import { createStore } from './overlay/store';
 import { runPendingSeek } from './pending-seek-runner';
 import { readDisplayedSubtitle, watchSubtitles } from './subtitle-dom';
 import { createSubtitleSession } from './subtitle-session';
+import { WATCH_CHECK_MS, createWatchTracker } from './watch-tracker';
 
 const SUBTITLE_FETCH_TIMEOUT_MS = 15_000;
 
@@ -78,6 +79,17 @@ export default defineContentScript({
       getVideoId,
       isValid: () => ctx.isValid,
     });
+    // Reminders spec §5: while a video plays with LingoFlix on, tell the background (once per show per day).
+    const watchTracker = createWatchTracker({
+      bridge,
+      isWatchPage,
+      isEnabled: () => settings?.enabled === true,
+      send: async (show) => {
+        await sendToBackground({ type: 'activity:watched', show });
+      },
+      now: Date.now,
+    });
+    ctx.setInterval(() => void watchTracker.check(), WATCH_CHECK_MS);
 
     const applySettings = (next: Settings) => {
       settings = next;
