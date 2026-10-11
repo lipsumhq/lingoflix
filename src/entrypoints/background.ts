@@ -5,10 +5,20 @@ import { createSdkClient } from '@/lib/claude/client';
 import { serveExplainPort, type ExplainPort } from '@/lib/claude/explain-service';
 import { EXPLAIN_PORT } from '@/lib/claude/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
+import { notificationPermission } from '@/lib/reminders/permission';
+import { installReminders } from '@/lib/reminders/service';
 import { migrateIfNeeded, saveItem, savedKeysFor, unsaveItem } from '@/lib/study-log/items';
 import { appendFollowUp, findExplanation, getExplanation, readStudyLog, saveExplanation } from '@/lib/study-log/store';
 
 export default defineBackground(() => {
+  // Reminders spec §6: added first and synchronously, so a worker woken by the reminder's alarm hears it.
+  installReminders({
+    browser,
+    notifications: () => browser.notifications,
+    permission: notificationPermission,
+    now: Date.now,
+  });
+
   // v2 spec §3.3: lines explained before v2 become saved whole-line items, once: on install and update, and
   // whenever the worker starts before it has run (a run that failed or was cut short). Both go through
   // migrateIfNeeded, which runs one conversion at a time and never rejects.
