@@ -1,4 +1,5 @@
 import { browser } from '#imports';
+import type { Show } from '@/lib/reminders/store';
 import type { Explanation, SaveSuggestion } from '@/lib/study-log/types';
 
 export type KeyTestResult = 'valid' | 'rejected' | 'network' | 'error';
@@ -20,6 +21,10 @@ export interface BackgroundRequests {
   'item:remove': { request: { explanationId: string; suggestion: SaveSuggestion }; response: { key: string } };
   'pending-seek:take': { request: { videoId: string }; response: { timeMs: number | null } };
   'open-options': { request: { hash?: string }; response: { ok: true } };
+  /** Reminders spec §5: a video is playing on Netflix; `show` is what to pick up later. */
+  'activity:watched': { request: { show: Show | null }; response: { ok: true } };
+  /** Reminders spec §3: Send a test. False when the reminder couldn't be shown. */
+  'reminder:test': { request: object; response: { ok: boolean } };
 }
 
 export type BackgroundRequestType = keyof BackgroundRequests;

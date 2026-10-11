@@ -7,12 +7,13 @@ import { EXPLAIN_PORT } from '@/lib/claude/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
 import { notificationPermission } from '@/lib/reminders/permission';
 import { installReminders } from '@/lib/reminders/service';
+import { recordWatched } from '@/lib/reminders/store';
 import { migrateIfNeeded, saveItem, savedKeysFor, unsaveItem } from '@/lib/study-log/items';
 import { appendFollowUp, findExplanation, getExplanation, readStudyLog, saveExplanation } from '@/lib/study-log/store';
 
 export default defineBackground(() => {
   // Reminders spec §6: added first and synchronously, so a worker woken by the reminder's alarm hears it.
-  installReminders({
+  const reminders = installReminders({
     browser,
     notifications: () => browser.notifications,
     permission: notificationPermission,
@@ -41,6 +42,8 @@ export default defineBackground(() => {
     openOptions: async (hash) => {
       await browser.tabs.create({ url: `${browser.runtime.getURL('/options.html')}${hash}` });
     },
+    recordWatched: (show) => recordWatched(show),
+    testReminder: () => reminders.test(),
   });
 
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {

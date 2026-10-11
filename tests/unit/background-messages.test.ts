@@ -5,6 +5,8 @@ import { getApiKey, maskApiKey, removeApiKey, setApiKey } from '@/lib/api-key';
 import { createMessageHandler, type MessageHandlerDeps } from '@/lib/background/message-handler';
 import type { ClaudeClient } from '@/lib/claude/client';
 import { PENDING_SEEK_MAX_AGE_MS, setPendingSeek, takePendingSeek } from '@/lib/pending-seek';
+import { localDate } from '@/lib/reminders/schedule';
+import { loadActivity, recordWatched, updateReminders } from '@/lib/reminders/store';
 import { listItems, saveItem, savedKeysFor, suggestionKey, unsaveItem } from '@/lib/study-log/items';
 import { findExplanation, getExplanation, saveExplanation } from '@/lib/study-log/store';
 import type { NewExplanation } from '@/lib/study-log/types';
@@ -50,6 +52,8 @@ function handlerWith(checkKey: ClaudeClient['checkKey'] = async () => {}, over: 
     savedKeysFor,
     takePendingSeek: (videoId) => takePendingSeek(videoId),
     openOptions,
+    recordWatched: (show) => recordWatched(show),
+    testReminder: async () => false,
     ...over,
   });
   const handle = (message: unknown, context = FROM_PAGE) => serve(message, context);
@@ -265,5 +269,35 @@ describe('other requests', () => {
     await expect(handle({ type: 'nope' })).rejects.toThrow(/Unknown request/);
     await expect(handle('nope')).rejects.toThrow(/Unknown request/);
     await expect(handle({ type: 'log:find', videoId: '1', language: 'en', phrase: 'x' })).rejects.toThrow(/Unknown request log:find/);
+  });
+});
+
+describe('reminder requests', () => {
+  const SHOW = { id: '80057281', title: 'Stranger Things' };
+
+  it('activity:watched records the day and a valid show, only while reminders are on', async () => {
+    const { handle } = handlerWith();
+    expect(await handle({ type: 'activity:watched', show: SHOW }, FROM_NETFLIX)).toEqual({ ok: true });
+    expect(await loadActivity()).toEqual({ lastWatchedOn: null, show: null });
+
+    await updateReminders((r) => ({ ...r, enabled: true }));
+    const before = localDate(Date.now());
+    await handle({ type: 'activity:watched', show: SHOW }, FROM_NETFLIX);
+    const after = localDate(Date.now());
+    const activity = await loadActivity();
+    expect([before, after]).toContain(activity.lastWatchedOn);
+    expect(activity.show).toEqual(SHOW);
+
+    expect(await handle({ type: 'activity:watched', show: { id: '1; DROP', title: 'x' } }, FROM_NETFLIX)).toEqual({ ok: true });
+    expect(await handle({ type: 'activity:watched' }, FROM_NETFLIX)).toEqual({ ok: true });
+    expect((await loadActivity()).show).toEqual(SHOW);
+  });
+
+  it('reminder:test answers whether the reminder was shown, for LingoFlix pages only', async () => {
+    const testReminder = vi.fn(async () => true);
+    const { handle } = handlerWith(undefined, { testReminder });
+    expect(await handle({ type: 'reminder:test' })).toEqual({ ok: true });
+    await expect(handle({ type: 'reminder:test' }, FROM_NETFLIX)).rejects.toThrow('Not allowed');
+    expect(testReminder).toHaveBeenCalledTimes(1);
   });
 });

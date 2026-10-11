@@ -19,6 +19,10 @@ export interface MessageHandlerDeps {
   savedKeysFor(explanation: Explanation): Promise<string[]>;
   takePendingSeek(videoId: string): Promise<number | null>;
   openOptions(hash: string): Promise<void>;
+  /** Reminders spec §5: the Netflix page says a video is playing (checked and stored by the reminders store). */
+  recordWatched(show: unknown): Promise<void>;
+  /** Reminders spec §3: Send a test. */
+  testReminder(): Promise<boolean>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -31,8 +35,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const looksLikeKey = (key: string) => /^[\x21-\x7e]{1,300}$/.test(key);
 const NOT_A_KEY = "That doesn't look like an API key.";
 const OPTIONS_ROUTE = /^#\/[a-z-]*$/;
-/** Requests that change or use the key: only LingoFlix's own pages (options, popup) may send them. */
-const PAGE_ONLY = new Set(['api-key:set', 'api-key:remove', 'api-key:test']);
+/** Requests only LingoFlix's own pages (options, popup) may send: the API key ones, and Send a test. */
+const PAGE_ONLY = new Set(['api-key:set', 'api-key:remove', 'api-key:test', 'reminder:test']);
 
 const sameText = (a: string, b: string) => normalizeLine(a).toLowerCase() === normalizeLine(b).toLowerCase();
 
@@ -137,6 +141,11 @@ export function createMessageHandler(deps: MessageHandlerDeps): (message: unknow
         await deps.openOptions(hash);
         return { ok: true } satisfies BackgroundResponse<'open-options'>;
       }
+      case 'activity:watched':
+        await deps.recordWatched(m.show);
+        return { ok: true } satisfies BackgroundResponse<'activity:watched'>;
+      case 'reminder:test':
+        return { ok: await deps.testReminder() } satisfies BackgroundResponse<'reminder:test'>;
       default:
         throw new Error(`Unknown request ${String(type)}`);
     }
