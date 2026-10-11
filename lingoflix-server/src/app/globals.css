@@ -1,9 +1,44 @@
 @import "tailwindcss";
 
-@theme {
+/* LingoFlix look (matches the extension): Popcorn yellow, Nunito, 2px borders. Light only for now. */
+:root {
+  --lf-page: #ffffff;
+  --lf-card: #ffffff;
+  --lf-soft: #f7f7f7;
+  --lf-line: #e5e5e5;
+  --lf-ink: #3c3c3c;
+  --lf-mute: #6b6b6b;
+  --lf-tint: #fff7d6;
+  --lf-tint-line: #ffd84d;
+  --lf-brand: #ffc800;
+  --lf-brand-edge: #e0a800;
+  --lf-on-brand: #3a2e00;
+  --lf-danger: #c62828;
+  --lf-focus: #3a2e00;
+}
+
+@theme inline {
+  --color-page: var(--lf-page);
+  --color-card: var(--lf-card);
+  --color-soft: var(--lf-soft);
+  --color-line: var(--lf-line);
+  --color-ink: var(--lf-ink);
+  --color-mute: var(--lf-mute);
+  --color-tint: var(--lf-tint);
+  --color-tint-line: var(--lf-tint-line);
+  --color-brand: var(--lf-brand);
+  --color-brand-edge: var(--lf-brand-edge);
+  --color-on-brand: var(--lf-on-brand);
+  --color-danger: var(--lf-danger);
   --font-sans: "Nunito Variable", ui-rounded, system-ui, sans-serif;
 }
 
-body {
-  font-family: var(--font-sans);
+@layer base {
+  body {
+    @apply bg-page font-sans text-ink antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--lf-focus);
+    outline-offset: 2px;
+  }
 }
