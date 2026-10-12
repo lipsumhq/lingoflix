@@ -10,7 +10,7 @@ order, and the small (440x280) and marquee (1400x560) promo tiles.
 
 **Category:** Education · **Language:** English
 
-**Homepage URL:** https://lingoflix.lipsum.fun · **Support URL:** https://lingoflix.lipsum.fun
+**Homepage URL:** https://lingoflix.lipsum.fun · **Support URL:** https://github.com/lipsumhq/lingoflix/issues
 
 **Mature content:** no
 
@@ -48,7 +48,10 @@ WHAT YOU NEED
 
 Privacy policy: https://lingoflix.lipsum.fun/privacy
 
-LingoFlix is free. If it helps you learn, you can support it at buymeacoffee.com/jaycho1214 or github.com/sponsors/jaycho1214.
+OPEN SOURCE
+LingoFlix is free and open source (MIT). Read the code and see exactly what it sends, and where: https://github.com/lipsumhq/lingoflix
+
+If it helps you learn, you can support it at buymeacoffee.com/jaycho1214 or github.com/sponsors/jaycho1214.
 
 LingoFlix is not affiliated with or endorsed by Netflix, Anthropic or OpenAI.
 ```
