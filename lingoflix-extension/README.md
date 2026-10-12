@@ -11,6 +11,7 @@ pnpm install
 pnpm test        # unit tests
 pnpm compile     # type-check
 pnpm build       # production build → .output/chrome-mv3
+pnpm zip:store   # Chrome Web Store zip, without the manifest key → .output/store/
 ```
 
 To try it on Netflix, load the build into your normal Chrome profile (WXT's dev browser
