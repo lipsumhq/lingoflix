@@ -15,7 +15,7 @@ export interface OverlayHandle {
 
 /**
  * Mounts the React overlay in a shadow root inside Netflix's player container (spec §5.3: visible in
- * fullscreen). autoMount follows the container as Netflix adds, replaces, or removes it (spec §8.5).
+ * fullscreen), and follows the container as Netflix adds, replaces, or removes it (spec §8.5).
  */
 export async function mountOverlay(ctx: ContentScriptContext, app: ReactNode): Promise<OverlayHandle> {
   let host: HTMLElement | null = null;
@@ -40,11 +40,28 @@ export async function mountOverlay(ctx: ContentScriptContext, app: ReactNode): P
       anchor = null;
     },
   });
-  ui.autoMount();
+  /**
+   * Netflix swaps its player container for a new one while the player loads. WXT's autoMount mounts
+   * again only once the selector stops matching, which a swap never does, so the overlay would leave
+   * with the old container: follow the container itself.
+   */
+  const follow = () => {
+    const player = document.querySelector(PLAYER_CONTAINER_SELECTOR);
+    if (host && host.parentElement === player) return;
+    if (host) ui.remove();
+    if (player) ui.mount();
+  };
+  const observer = new MutationObserver(follow);
+  observer.observe(document, { childList: true, subtree: true });
+  ctx.onInvalidated(() => observer.disconnect());
+  follow();
   return {
     contains: (target) =>
       !!host && target instanceof Node && (target === host || host.contains(target) || !!host.shadowRoot?.contains(target)),
     playerRect: () => (anchor?.isConnected ? anchor.getBoundingClientRect() : null),
-    remove: () => ui.remove(),
+    remove: () => {
+      observer.disconnect();
+      ui.remove();
+    },
   };
 }

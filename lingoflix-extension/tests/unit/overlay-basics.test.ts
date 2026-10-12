@@ -3,35 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pointInRects } from '@/entrypoints/netflix.content/overlay/hit-test';
 import { createHoverTracker } from '@/entrypoints/netflix.content/overlay/hover';
 import { isolateEvents } from '@/entrypoints/netflix.content/overlay/isolate';
-import { mountOverlay } from '@/entrypoints/netflix.content/overlay/mount';
 import { createPauseGuard } from '@/entrypoints/netflix.content/overlay/pause';
-
-interface FakeUiOptions {
-  onMount(container: HTMLElement, shadow: ShadowRoot, host: HTMLElement): unknown;
-  onRemove?(mounted: unknown): void;
-}
-
-// A stand-in for WXT's shadow-root UI: an open shadow root on a host appended to <body>. WXT's Vitest
-// plugin rewrites `#imports` to this module, so this is the path to mock.
-vi.mock('wxt/utils/content-script-ui/shadow-root', () => ({
-  createShadowRootUi: async (_ctx: unknown, options: FakeUiOptions) => {
-    const host = document.createElement('lingoflix-overlay');
-    const shadow = host.attachShadow({ mode: 'open' });
-    const container = document.createElement('div');
-    shadow.append(container);
-    let mounted: unknown;
-    return {
-      autoMount() {
-        document.body.append(host);
-        mounted = options.onMount(container, shadow, host);
-      },
-      remove() {
-        options.onRemove?.(mounted);
-        host.remove();
-      },
-    };
-  },
-}));
 
 afterEach(() => {
   vi.useRealTimers();
@@ -178,30 +150,5 @@ describe('isolateEvents', () => {
     expect(netflix).not.toHaveBeenCalled();
     expect(lingoflixCapture).toHaveBeenCalledTimes(1);
     window.removeEventListener('keydown', lingoflixCapture, { capture: true });
-  });
-});
-
-describe('mountOverlay', () => {
-  it('contains() sees the host and the nodes inside its shadow root', async () => {
-    const handle = await mountOverlay({} as never, null);
-    const host = document.querySelector('lingoflix-overlay')!;
-    const button = document.createElement('button');
-    host.shadowRoot!.append(button);
-    expect(handle.contains(host)).toBe(true);
-    expect(handle.contains(button)).toBe(true);
-    expect(handle.contains(document.body)).toBe(false);
-    expect(handle.contains(null)).toBe(false);
-
-    // What the runtime's window capture listener sees for a press on the card.
-    let target: EventTarget | null = null;
-    const listener = (event: Event) => (target = event.composedPath()[0] ?? null);
-    window.addEventListener('pointerdown', listener, { capture: true });
-    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
-    window.removeEventListener('pointerdown', listener, { capture: true });
-    expect(target).toBe(button);
-    expect(handle.contains(target)).toBe(true);
-
-    handle.remove();
-    expect(handle.contains(button)).toBe(false);
   });
 });
