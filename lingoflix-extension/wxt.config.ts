@@ -3,22 +3,26 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   srcDir: 'src',
+  // The store build goes to its own folder, so it never replaces the unpacked build Chrome has loaded.
+  ...(process.env.LINGOFLIX_STORE ? { outDir: '.output/store' } : {}),
   modules: ['@wxt-dev/module-react', '@wxt-dev/auto-icons'],
   // Toolbar/extension icons generated from the logo (spec §5.10).
   autoIcons: { baseIconPath: 'assets/icon.svg' },
   vite: () => ({ plugins: [tailwindcss()] }),
-  manifest: {
+  // A function so the store build can drop `key`: the Chrome Web Store rejects a package that has one.
+  manifest: () => ({
     name: 'LingoFlix: Understand every line on Netflix',
     short_name: 'LingoFlix',
     description:
-      'Understand every line on Netflix: custom shortcuts, subtitle toggle and AI explanations. Not affiliated with Netflix.',
+      'Explains Netflix subtitles line by line with your own Claude or OpenAI key. Save words to a Study Log. Not affiliated with Netflix.',
     permissions: ['storage', 'unlimitedStorage', 'alarms'],
     // Reminders spec §7: asked for only when the learner turns reminders on.
     optional_permissions: ['notifications'],
     // Free-own-key spec §4.7: the AI providers too, so the background's requests don't depend on their CORS.
     host_permissions: ['https://www.netflix.com/*', 'https://api.anthropic.com/*', 'https://api.openai.com/*'],
-    // The Chrome Web Store item's public key, so every build (unpacked too) has the store's extension ID,
+    // The Chrome Web Store item's public key, so every unpacked build has the store's extension ID,
     // gdgblbcjeocifdhjfbpjpkcphlfmaoll: the Study Log is stored under that ID (free-own-key spec §2).
-    key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA+I0ka9EAb8zBfMzTGLviK2aBk0y6phAw7GpDexn/9A4rtMK3wBy8IVWgv+Vm2uk+xnNlUBDTYZX8rH5K12JDxTKqtMsXAYOLhankg7fJmAw25RrhI+7M36c2xHpX/Pr+qXRehGLPkBRDx+35jaBp1Gx013bG9Cgf3bNVuUmxhpR4eUdspVkj/CebCvtxLDZF6IQAuvd6S+ie2ZWK4+/37mAktgkSYMewgRXu+qr/ur0f7W24zXS3gRNnOpOHcSrgeWJGCVVWE/iC1R2LXCelsQWhvctxwrUDU3CAbGh4Xb2wPu5CU+f1/gTMBKCjWpi7owwC8Z3pKCgRATLo95BGAwIDAQAB',
-  },
+    // `pnpm zip:store` leaves it out; the store gives the same ID.
+    ...(process.env.LINGOFLIX_STORE ? {} : { key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA+I0ka9EAb8zBfMzTGLviK2aBk0y6phAw7GpDexn/9A4rtMK3wBy8IVWgv+Vm2uk+xnNlUBDTYZX8rH5K12JDxTKqtMsXAYOLhankg7fJmAw25RrhI+7M36c2xHpX/Pr+qXRehGLPkBRDx+35jaBp1Gx013bG9Cgf3bNVuUmxhpR4eUdspVkj/CebCvtxLDZF6IQAuvd6S+ie2ZWK4+/37mAktgkSYMewgRXu+qr/ur0f7W24zXS3gRNnOpOHcSrgeWJGCVVWE/iC1R2LXCelsQWhvctxwrUDU3CAbGh4Xb2wPu5CU+f1/gTMBKCjWpi7owwC8Z3pKCgRATLo95BGAwIDAQAB' }),
+  }),
 });

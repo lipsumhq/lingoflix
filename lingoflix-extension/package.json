@@ -1,7 +1,7 @@
 {
   "name": "lingoflix-extension",
-  "version": "0.1.0",
-  "description": "Understand every line on Netflix: custom shortcuts, subtitle toggle and AI explanations.",
+  "version": "1.0.0",
+  "description": "Explains Netflix subtitles line by line with your own Claude or OpenAI key, and keeps a Study Log.",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -10,6 +10,7 @@
     "dev": "wxt",
     "build": "wxt build",
     "zip": "wxt zip",
+    "zip:store": "LINGOFLIX_STORE=1 wxt zip",
     "compile": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
