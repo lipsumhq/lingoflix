@@ -89,11 +89,8 @@ Free, no in-app purchases · Visibility: Public · Regions: all
 
 ## Test instructions
 
-```text
-No LingoFlix account is needed. Testing needs a Netflix account.
+Username and password stay empty. The instructions field takes at most 500 characters:
 
-1. Open any title on netflix.com (https://www.netflix.com/watch/...) and turn subtitles on.
-2. Line by line: press D for the next subtitle line, A for the previous one, R to replay the current one, C to hide or show subtitles. These work without an API key.
-3. Explanations need an API key from Anthropic (console.anthropic.com) or OpenAI (platform.openai.com). Open LingoFlix's options page (click the LingoFlix icon, then Settings) and paste the key. On Netflix, hover a subtitle line or press E: a card explains the line and suggests items to save. Without a key, the card says how to add one.
-4. Saved items appear in the options page's Study Log tab, where they can be browsed, opened and exported (Export menu: Anki, CSV or backup).
+```text
+No LingoFlix account is needed; a Netflix account is. On netflix.com/watch with subtitles on: D / A jump to the next / previous line, R replays it, C hides subtitles (no API key needed). For explanations, paste an Anthropic or OpenAI API key in LingoFlix Settings (toolbar icon, then Settings), then hover a subtitle or press E. Without a key, the card says how to add one. Saved items appear in the Study Log tab (Export: Anki, CSV, backup).
 ```
