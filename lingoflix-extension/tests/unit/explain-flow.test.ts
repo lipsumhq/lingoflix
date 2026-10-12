@@ -41,6 +41,14 @@ describe('placeCard (spec §5.3: above the line, inside the player, scrolls if t
     expect(p.top).toBeGreaterThanOrEqual(player.top);
   });
 
+  it('goes below a line Netflix moved to the top (text on screen at the bottom) when the card does not fit above', () => {
+    const player = { left: 0, top: 0, width: 1280, height: 800 };
+    const line = { left: 400, top: 150, width: 480, height: 40 };
+    expect(placeCard(line, player, 400)).toEqual({ left: 380, top: 202, width: 520, maxHeight: 526 });
+    // A short card that fits above the line stays there.
+    expect(placeCard(line, player, 100)).toEqual({ left: 380, top: 38, width: 520, maxHeight: 140 });
+  });
+
   it('without a line, sits above the player controls', () => {
     const p = placeCard(null, { left: 0, top: 0, width: 1000, height: 600 }, 200);
     expect(p.left).toBe(240);
