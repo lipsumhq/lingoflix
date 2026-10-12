@@ -9,10 +9,12 @@ export const SITE_URL = 'https://lingoflix.lipsum.fun';
 export const DONATION_TITLE = 'Enjoying LingoFlix?';
 export const DONATION_COPY = "It's free forever. A coffee keeps it going.";
 
-/** Follow-up answers (main spec §7.1). */
-export const CLAUDE_MAX_TOKENS = 1024;
-/** Explanations: room for the suggest_saves call after the text (v2 spec §5.1). */
-export const CLAUDE_EXPLAIN_MAX_TOKENS = 1536;
+/** Follow-up answers (main spec §7.1); any thinking counts toward it. */
+export const CLAUDE_MAX_TOKENS = 2048;
+/** Explanations: room for the JSON reply with its suggestions (v2 spec §5.1), and any thinking. */
+export const CLAUDE_EXPLAIN_MAX_TOKENS = 4096;
+/** Explaining a line is content writing: low effort keeps the card's first words quick (Sonnet 5.5 thinks at medium and up). */
+export const CLAUDE_EFFORT = 'low';
 export const CLAUDE_API_BASE_URL = 'https://api.anthropic.com';
 /** OpenAI: one limit for explanations and follow-ups; reasoning tokens count toward it (free-own-key spec §4.3). */
 export const OPENAI_MAX_OUTPUT_TOKENS = 8000;

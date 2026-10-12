@@ -9,6 +9,7 @@ import type {
 import { OPENAI_API_BASE_URL, OPENAI_MAX_OUTPUT_TOKENS } from '@/lib/config';
 import type { AiClient, StreamResult, SystemBlock, ToolCall, ToolDefinition } from './client';
 import { PROVIDERS } from './provider';
+import { closedSchema } from './schema';
 
 const KEY_CHECK_TIMEOUT_MS = 15_000;
 /** Free-own-key spec §4.3: the output limit cut the answer off before any text (all of it went to reasoning). */
@@ -17,9 +18,6 @@ const CUT_OFF = 'The answer was cut off. Try again.';
 const DECLINED = 'OpenAI declined to answer this line.';
 /** Incomplete for any other reason, or failed without a message. Never a raw reason code. */
 const UNFINISHED = "OpenAI didn't finish the answer.";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
  * The system prompt as one developer message's text items (spec §4.5): `cache` puts an explicit prompt-cache
@@ -36,26 +34,13 @@ export function toDeveloperContent(system: string | readonly SystemBlock[]): Res
     );
 }
 
-/** A JSON Schema for strict mode: every object closed with `additionalProperties: false`. */
-function strictSchema(schema: Record<string, unknown>): Record<string, unknown> {
-  const strict: Record<string, unknown> = { ...schema };
-  if (isRecord(schema.properties)) {
-    strict.properties = Object.fromEntries(
-      Object.entries(schema.properties).map(([name, value]) => [name, isRecord(value) ? strictSchema(value) : value]),
-    );
-  }
-  if (isRecord(schema.items)) strict.items = strictSchema(schema.items);
-  if (schema.type === 'object') strict.additionalProperties = false;
-  return strict;
-}
-
 /** Spec §4.3: the tool as a strict function tool, with the same schema as the Claude tool. */
 export function toFunctionTool(tool: ToolDefinition): FunctionTool {
   return {
     type: 'function',
     name: tool.name,
     description: tool.description,
-    parameters: strictSchema({ ...tool.input_schema, type: 'object' }),
+    parameters: closedSchema({ ...tool.input_schema, type: 'object' }),
     strict: true,
   };
 }
