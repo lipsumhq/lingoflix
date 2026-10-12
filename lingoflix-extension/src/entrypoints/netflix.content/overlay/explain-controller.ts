@@ -190,11 +190,12 @@ export function createExplainController(deps: ExplainControllerDeps): ExplainCon
         },
         {
           onDelta: (delta) => setFollowUp((f) => ({ ...f, answer: f.answer + delta })),
+          // By question, not position: a follow-up asked on a card since closed may have been stored first.
           onDone: (explanation) =>
-            setFollowUp((f) => ({ ...f, status: 'done', answer: explanation.followUps[index]?.answer ?? f.answer }), {
-              explanation,
-              followUpBusy: false,
-            }),
+            setFollowUp(
+              (f) => ({ ...f, status: 'done', answer: explanation.followUps.findLast((x) => x.question === text)?.answer ?? f.answer }),
+              { explanation, followUpBusy: false },
+            ),
           onError: (_code, message) => setFollowUp((f) => ({ ...f, status: 'error', error: message }), { followUpBusy: false }),
         },
       );

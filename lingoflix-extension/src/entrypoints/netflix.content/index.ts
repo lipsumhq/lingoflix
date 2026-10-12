@@ -154,7 +154,7 @@ export default defineContentScript({
       unwatch();
       stopSubtitles();
       runtime.teardown();
-      overlay?.remove(); // also stops autoMount watching the page for this orphaned script
+      overlay?.remove(); // also stops the overlay following the player for this orphaned script
       bridge.dispose();
       controller.teardown();
     });

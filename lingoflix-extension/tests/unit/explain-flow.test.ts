@@ -296,6 +296,23 @@ describe('explain controller', () => {
     expect(store.get()).toMatchObject({ followUpBusy: false, followUps: [{ answer: 'No.', status: 'done' }] });
   });
 
+  it('a follow-up keeps its own answer when the explanation stored another one first (asked on a card since closed)', async () => {
+    const { store, ports, explain } = await openStored({ explanation: { ...SAVED, followUps: [] } as Explanation, savedKeys: [] });
+    explain.askFollowUp('Is it slang?');
+    ports[0]!.receive({ type: 'delta', text: 'Yes' });
+    // A follow-up asked before the line was reopened finished in the background and was stored before this one.
+    const followUps = [
+      { question: 'Formal?', answer: 'No.' },
+      { question: 'Is it slang?', answer: 'Yes, casual.' },
+    ];
+    ports[0]!.receive({ type: 'done', explanation: { ...SAVED, followUps }, savedKeys: [] });
+    expect(store.get()).toMatchObject({
+      followUpBusy: false,
+      explanation: { followUps },
+      followUps: [{ question: 'Is it slang?', answer: 'Yes, casual.', status: 'done', error: null }],
+    });
+  });
+
   it("fits a story too big for the background's parser, for the explanation and its follow-ups", async () => {
     // 1000 lines of 300 characters (300 000 in all), the newest 5000 characters long.
     const huge: StoryLine[] = Array.from({ length: 1000 }, (_, i) => ({ startMs: i * 1000, text: 'x'.repeat(i === 999 ? 5000 : 300) }));

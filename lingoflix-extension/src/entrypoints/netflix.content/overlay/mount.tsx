@@ -47,7 +47,8 @@ export async function mountOverlay(ctx: ContentScriptContext, app: ReactNode): P
    */
   const follow = () => {
     const player = document.querySelector(PLAYER_CONTAINER_SELECTOR);
-    if (host && host.parentElement === player) return;
+    // Not a bare parent check: a host and a container both gone in one tick would compare null to null.
+    if (host?.isConnected && host.parentElement === player) return;
     if (host) ui.remove();
     if (player) ui.mount();
   };

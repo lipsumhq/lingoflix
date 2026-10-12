@@ -36,8 +36,9 @@ export interface ExplainServiceDeps {
   /**
    * A trivial extension API call, made every 25 s while an answer is in progress: Chrome stops a background
    * that makes no call for 30 s, and with no card watching nothing else would (finish-answers spec §3.4).
+   * A call that throws or rejects (e.g. while the extension shuts down) is ignored.
    */
-  keepAlive(): void;
+  keepAlive(): Promise<unknown> | void;
   idleTimeoutMs?: number;
 }
 
@@ -130,10 +131,19 @@ export function createExplainService(deps: ExplainServiceDeps): ExplainService {
   let inProgress = 0;
   let keepAliveTimer: ReturnType<typeof setInterval> | undefined;
 
+  /** A failed call only misses one beat; the next one, 25 s later, tries again. */
+  const keepAlive = async () => {
+    try {
+      await deps.keepAlive();
+    } catch {
+      // ignored: see ExplainServiceDeps.keepAlive
+    }
+  };
+
   /** Finish-answers spec §3.4: Chrome would stop the background mid-answer once no card is watching. */
   const begin = () => {
     inProgress += 1;
-    if (inProgress === 1) keepAliveTimer = setInterval(() => deps.keepAlive(), KEEP_ALIVE_MS);
+    if (inProgress === 1) keepAliveTimer = setInterval(() => void keepAlive(), KEEP_ALIVE_MS);
   };
   const end = () => {
     inProgress -= 1;
@@ -180,7 +190,13 @@ export function createExplainService(deps: ExplainServiceDeps): ExplainService {
         system,
         messages: buildFollowUpMessages(explanation, message.question, recent),
       },
-      finish: (result) => deps.appendFollowUp(explanation.id, { question: message.question.trim(), answer: result.text }),
+      finish: async (result) => {
+        // Regenerate replaces the response (same id) and clears the follow-ups, which referred to the old one:
+        // a follow-up still in progress then was about the old response too, so it is not kept.
+        const current = await deps.getExplanation(explanation.id);
+        if (current?.response !== explanation.response) return null;
+        return deps.appendFollowUp(explanation.id, { question: message.question.trim(), answer: result.text });
+      },
     };
   }
 

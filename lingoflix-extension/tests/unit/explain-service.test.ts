@@ -678,6 +678,34 @@ describe('explain service: answers finish (finish-answers spec)', () => {
     expect(card.sent).toEqual([]);
   });
 
+  it('a follow-up that finishes after its explanation was regenerated is not appended (it was about the old response)', async () => {
+    const stored = await saveExplanation(STORED);
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const followUp = fakePort();
+    service.serve(followUp.port);
+    followUp.send({ type: 'follow-up', explanationId: stored.id, question: 'Why?', sections: DEFAULT_SETTINGS.cardSections, storySoFar: [] });
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+
+    // Regenerate: the line is explained again and saved, under the same id, before the follow-up finishes.
+    const regenerate = fakePort();
+    service.serve(regenerate.port);
+    regenerate.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(2));
+    streams[1]!.text('New explanation');
+    streams[1]!.finish();
+    await vi.waitFor(() => expect(regenerate.sent.at(-1)?.type).toBe('done'));
+    expect(doneOf(regenerate.sent).explanation.id).toBe(stored.id);
+
+    streams[0]!.text('Because.');
+    streams[0]!.finish();
+    // Regenerate cancels the follow-up's Port; one still watching hears the explanation it was about is gone.
+    await vi.waitFor(() =>
+      expect(followUp.sent.at(-1)).toEqual({ type: 'error', code: 'api', message: 'This explanation is no longer available.', provider: 'claude' }),
+    );
+    expect(await getExplanation(stored.id)).toMatchObject({ response: 'New explanation', followUps: [] });
+  });
+
   it('keeps the background alive every 25 s while an answer or follow-up is in progress, then stops', async () => {
     vi.useFakeTimers();
     try {
@@ -711,6 +739,61 @@ describe('explain service: answers finish (finish-answers spec)', () => {
       vi.useRealTimers();
     }
   });
+
+  it('a follow-up alone in progress keeps the background alive too, and the timer stops after it', async () => {
+    vi.useFakeTimers();
+    try {
+      const stored = await saveExplanation(STORED);
+      const keepAlive = vi.fn();
+      const { client, streams } = controlledClient();
+      const service = createExplainService(deps(client, { keepAlive, idleTimeoutMs: 600_000 }));
+      const card = fakePort();
+      service.serve(card.port);
+      card.send({ type: 'follow-up', explanationId: stored.id, question: 'Why?', sections: DEFAULT_SETTINGS.cardSections, storySoFar: [] });
+      await vi.waitFor(() => expect(streams).toHaveLength(1));
+      card.disconnect();
+
+      await vi.advanceTimersByTimeAsync(50_000);
+      expect(keepAlive).toHaveBeenCalledTimes(2);
+      streams[0]!.text('Because.');
+      streams[0]!.finish();
+      await vi.waitFor(async () => expect((await getExplanation(stored.id))!.followUps).toHaveLength(1));
+      keepAlive.mockClear();
+      await vi.advanceTimersByTimeAsync(100_000);
+      expect(keepAlive).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a keep-alive call that fails (e.g. while the extension shuts down) is ignored, and the answer still finishes', async () => {
+    vi.useFakeTimers();
+    try {
+      // A plain function, not vi.fn: a mock handles the promises it returns, which would hide a leaked rejection
+      // (Vitest fails the run on an unhandled one).
+      let calls = 0;
+      const keepAlive = () => {
+        calls += 1;
+        if (calls === 1) return Promise.reject(new Error('Extension context invalidated.'));
+        throw new Error('Extension context invalidated.');
+      };
+      const { client, streams } = controlledClient();
+      const service = createExplainService(deps(client, { keepAlive, idleTimeoutMs: 600_000 }));
+      const card = fakePort();
+      service.serve(card.port);
+      card.send(START);
+      await vi.waitFor(() => expect(streams).toHaveLength(1));
+
+      await vi.advanceTimersByTimeAsync(50_000); // a rejected call, then one that throws
+      expect(calls).toBe(2);
+      streams[0]!.text('Still here.');
+      streams[0]!.finish();
+      await vi.waitFor(() => expect(card.sent.at(-1)?.type).toBe('done'));
+      expect(doneOf(card.sent).explanation.response).toBe('Still here.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('explain service: follow-ups', () => {
@@ -737,6 +820,30 @@ describe('explain service: follow-ups', () => {
     expect(done.explanation.suggestions).toEqual(STORED.suggestions); // a follow-up never changes the suggestions
     expect(done.savedKeys).toEqual([]);
     expect((await getExplanation(saved.id))?.followUps).toEqual([{ question: 'Is it formal?', answer: '아니요.' }]);
+  });
+
+  it('two identical follow-ups started at once are not joined: each is asked, and both are appended', async () => {
+    const stored = await saveExplanation(STORED);
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const [a, b] = [fakePort(), fakePort()];
+    for (const card of [a, b]) {
+      service.serve(card.port);
+      card.send({ type: 'follow-up', explanationId: stored.id, question: 'Why?', sections: DEFAULT_SETTINGS.cardSections, storySoFar: [] });
+    }
+    await vi.waitFor(() => expect(streams).toHaveLength(2));
+    streams[0]!.text('First.');
+    streams[0]!.finish();
+    await vi.waitFor(() => expect(a.sent.at(-1)?.type).toBe('done'));
+    streams[1]!.text('Second.');
+    streams[1]!.finish();
+    await vi.waitFor(() => expect(b.sent.at(-1)?.type).toBe('done'));
+    expect(a.sent[0]).toEqual({ type: 'delta', text: 'First.' });
+    expect(b.sent[0]).toEqual({ type: 'delta', text: 'Second.' });
+    expect((await getExplanation(stored.id))!.followUps).toEqual([
+      { question: 'Why?', answer: 'First.' },
+      { question: 'Why?', answer: 'Second.' },
+    ]);
   });
 
   it('a follow-up on a deleted explanation, malformed messages, and second messages are handled', async () => {

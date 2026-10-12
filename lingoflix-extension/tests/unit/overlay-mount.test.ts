@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest';
+import { createElement, type ReactNode } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ContentScriptContext } from 'wxt/utils/content-script-context';
 import { mountOverlay, type OverlayHandle } from '@/entrypoints/netflix.content/overlay/mount';
 
@@ -20,9 +21,9 @@ const overlayIn = (root: ParentNode) => root.querySelector('lingoflix-overlay');
 let ctx: ContentScriptContext;
 let handle: OverlayHandle | null = null;
 
-async function mount(): Promise<OverlayHandle> {
+async function mount(app: ReactNode = null): Promise<OverlayHandle> {
   ctx = new ContentScriptContext('netflix');
-  handle = await mountOverlay(ctx, null);
+  handle = await mountOverlay(ctx, app);
   await settle();
   return handle;
 }
@@ -82,6 +83,28 @@ describe('mountOverlay', () => {
     await settle();
     expect(overlayIn(player)).toBeNull();
     expect(overlay.playerRect()).toBeNull();
+  });
+
+  it('leaves when Netflix empties its container and removes it in the same tick', async () => {
+    const player = netflixPlayer();
+    document.body.append(player);
+    const overlay = await mount(createElement('p', { className: 'card' }, 'Card'));
+    const host = overlayIn(player)!;
+    const card = () => host.shadowRoot!.querySelector('.card');
+    await vi.waitFor(() => expect(card()).not.toBeNull());
+
+    player.replaceChildren(); // the overlay goes first, then its container, before the observer runs
+    player.remove();
+    await settle();
+    // Unmounted, not left running on the detached host.
+    expect(card()).toBeNull();
+    expect(overlay.contains(host)).toBe(false);
+
+    const next = netflixPlayer();
+    document.body.append(next);
+    await settle();
+    expect(overlayIn(next)).not.toBeNull();
+    await vi.waitFor(() => expect(card()).not.toBeNull());
   });
 
   it('stops following the player once removed, or once the extension is reloaded', async () => {

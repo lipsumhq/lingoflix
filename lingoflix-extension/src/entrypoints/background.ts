@@ -66,7 +66,7 @@ export default defineBackground(() => {
     appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
     loadHistory: readStudyLog,
     savedKeysFor,
-    keepAlive: () => void browser.runtime.getPlatformInfo(),
+    keepAlive: () => browser.runtime.getPlatformInfo(),
   });
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== EXPLAIN_PORT || port.sender?.id !== browser.runtime.id) return;
