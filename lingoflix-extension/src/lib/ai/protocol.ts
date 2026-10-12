@@ -6,7 +6,7 @@ import { STORY_SEND_LIMIT, type StoryLine } from '@/lib/subtitles/context';
 import type { ExplainRequest } from './prompt';
 import { PROVIDERS, type Provider } from './provider';
 
-/** One Port per request (spec §6.3); disconnecting aborts it. */
+/** One Port per request (spec §6.3); disconnecting only stops that card watching (finish-answers spec §3.2). */
 export const EXPLAIN_PORT = 'explain';
 
 export type ExplainClientMessage =

@@ -2,7 +2,7 @@ import { browser, defineBackground } from '#imports';
 import { getApiKey, removeApiKey, setApiKey } from '@/lib/api-key';
 import { createMessageHandler } from '@/lib/background/message-handler';
 import { createClient } from '@/lib/ai/client';
-import { serveExplainPort, type ExplainPort } from '@/lib/ai/explain-service';
+import { createExplainService, type ExplainPort } from '@/lib/ai/explain-service';
 import { EXPLAIN_PORT } from '@/lib/ai/protocol';
 import { takePendingSeek } from '@/lib/pending-seek';
 import { notificationPermission } from '@/lib/reminders/permission';
@@ -57,16 +57,19 @@ export default defineBackground(() => {
     return true; // respond asynchronously
   });
 
+  // One service for every card, so a card that reopens a line joins its answer (finish-answers spec §3.3).
+  const explain = createExplainService({
+    getApiKey,
+    createClient,
+    saveExplanation: (fields) => saveExplanation(fields),
+    getExplanation,
+    appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
+    loadHistory: readStudyLog,
+    savedKeysFor,
+    keepAlive: () => void browser.runtime.getPlatformInfo(),
+  });
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== EXPLAIN_PORT || port.sender?.id !== browser.runtime.id) return;
-    serveExplainPort(port as unknown as ExplainPort, {
-      getApiKey,
-      createClient,
-      saveExplanation: (fields) => saveExplanation(fields),
-      getExplanation,
-      appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
-      loadHistory: readStudyLog,
-      savedKeysFor,
-    });
+    explain.serve(port as unknown as ExplainPort);
   });
 });

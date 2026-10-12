@@ -36,7 +36,7 @@ export interface ExplainController {
   askFollowUp(question: string): void;
   /** Saves a row of the card's Save section, or removes it when it is saved (v2 spec §4.1). */
   toggleSave(row: SaveSuggestion): void;
-  /** Closes the card, aborts its requests, and resumes playback if LingoFlix paused it. */
+  /** Closes the card, stops watching its requests (they still finish), and resumes playback if LingoFlix paused it. */
   close(): void;
   isOpen(): boolean;
   openedBy(): 'hover' | 'shortcut' | null;

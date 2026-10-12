@@ -3,7 +3,7 @@ import { RateLimitError as OpenAIRateLimitError } from 'openai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { AiClient, StreamParams, SystemBlock, ToolCall } from '@/lib/ai/client';
-import { serveExplainPort, type ExplainPort, type ExplainServiceDeps } from '@/lib/ai/explain-service';
+import { createExplainService, type ExplainPort, type ExplainServiceDeps } from '@/lib/ai/explain-service';
 import type { ExplainRequest } from '@/lib/ai/prompt';
 import type { ExplainServerMessage } from '@/lib/ai/protocol';
 import { PROVIDERS } from '@/lib/ai/provider';
@@ -107,9 +107,38 @@ function deps(client: AiClient, over: Partial<ExplainServiceDeps> = {}): Explain
     appendFollowUp: (id, followUp) => appendFollowUp(id, followUp),
     loadHistory: async () => ({ items: await listItems(), explanations: await listExplanations() }),
     savedKeysFor,
+    keepAlive: () => {},
     ...over,
   };
 }
+
+/** One card's Port, served by its own service (tests of a single card). */
+const serveExplainPort = (port: ExplainPort, d: ExplainServiceDeps) => createExplainService(d).serve(port);
+
+/** A client the test drives: each stream waits for the test's text, then for it to finish or fail. */
+function controlledClient() {
+  const streams: { signal: AbortSignal; text(delta: string): void; finish(toolCalls?: ToolCall[]): void; fail(error: unknown): void }[] = [];
+  const client: AiClient = {
+    stream: (_params, onText, signal) =>
+      new Promise((resolve, reject) => {
+        let text = '';
+        signal.addEventListener('abort', () => reject(new Error('aborted')));
+        streams.push({
+          signal,
+          text: (delta) => {
+            text += delta;
+            onText(delta);
+          },
+          finish: (toolCalls = []) => resolve({ text, toolCalls }),
+          fail: reject,
+        });
+      }),
+    async checkKey() {},
+  };
+  return { client, streams };
+}
+
+const START = { type: 'start', request: REQUEST } as const;
 
 const systemOf = (params: StreamParams) => params.system as SystemBlock[];
 const doneOf = (sent: ExplainServerMessage[]) => sent.at(-1) as Extract<ExplainServerMessage, { type: 'done' }>;
@@ -357,19 +386,6 @@ describe('explain service: failures', () => {
     await vi.waitFor(() => expect(sent).toEqual([{ type: 'error', code: 'network', message: "Couldn't reach OpenAI", provider: 'openai' }]));
   });
 
-  it('disconnect aborts the request and saves nothing', async () => {
-    const { client, signals } = fakeClient({ hang: true });
-    const { port, sent, send, disconnect } = fakePort();
-    serveExplainPort(port, deps(client));
-    send({ type: 'start', request: REQUEST });
-    await vi.waitFor(() => expect(signals).toHaveLength(1));
-    disconnect();
-    await new Promise((r) => setTimeout(r, 0));
-    expect(signals[0]!.aborted).toBe(true);
-    expect(sent).toEqual([]);
-    expect(await listExplanations()).toEqual([]);
-  });
-
   it("a silent stream times out as Couldn't reach Claude", async () => {
     const { client } = fakeClient({ hang: true });
     const { port, sent, send } = fakePort();
@@ -460,6 +476,240 @@ describe('explain service: failures', () => {
     await vi.waitFor(() =>
       expect(openai.sent.at(-1)).toEqual({ type: 'error', code: 'api', message: 'OpenAI returned an empty answer.', provider: 'openai' }),
     );
+  });
+});
+
+describe('explain service: answers finish (finish-answers spec)', () => {
+  it('a card that closes mid-answer stops watching; the answer still finishes and is saved', async () => {
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const card = fakePort();
+    service.serve(card.port);
+    card.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.text('Part one. ');
+    card.disconnect();
+    streams[0]!.text('Part two.');
+    streams[0]!.finish([SUGGESTIONS]);
+
+    await vi.waitFor(async () => expect(await findExplanation('80077211', 'ko', REQUEST.phrase)).not.toBeNull());
+    const saved = (await findExplanation('80077211', 'ko', REQUEST.phrase))!;
+    expect(saved.response).toBe('Part one. Part two.');
+    expect(saved.suggestions.map((s) => s.text)).toEqual(['call it a night', 'gonna']);
+    expect(streams[0]!.signal.aborted).toBe(false);
+    expect(card.sent).toEqual([{ type: 'delta', text: 'Part one. ' }]);
+  });
+
+  it('a card that reopens the line joins the answer: the text so far, then the rest and done; the AI is asked once', async () => {
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const first = fakePort();
+    service.serve(first.port);
+    first.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.text('Part one. ');
+    streams[0]!.text('Part two. ');
+    first.disconnect();
+
+    // The same line, spaced differently, with a later story: still the same answer.
+    const reopened = fakePort();
+    service.serve(reopened.port);
+    reopened.send({
+      type: 'start',
+      request: { ...REQUEST, phrase: `  ${REQUEST.phrase.replace(' ', '  ')} `, storySoFar: [{ text: 'Hi.', startMs: 1_000 }] },
+    });
+    expect(reopened.sent).toEqual([{ type: 'delta', text: 'Part one. Part two. ' }]);
+
+    streams[0]!.text('Part three.');
+    streams[0]!.finish();
+    await vi.waitFor(() => expect(reopened.sent.at(-1)?.type).toBe('done'));
+    expect(reopened.sent.slice(0, 2)).toEqual([
+      { type: 'delta', text: 'Part one. Part two. ' },
+      { type: 'delta', text: 'Part three.' },
+    ]);
+    expect(doneOf(reopened.sent).explanation.response).toBe('Part one. Part two. Part three.');
+    expect(first.sent).toEqual([
+      { type: 'delta', text: 'Part one. ' },
+      { type: 'delta', text: 'Part two. ' },
+    ]);
+    expect(streams).toHaveLength(1);
+    expect(await listExplanations()).toHaveLength(1);
+  });
+
+  it('two cards that start the same line before the key is read share one request', async () => {
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const [a, b] = [fakePort(), fakePort()];
+    service.serve(a.port);
+    service.serve(b.port);
+    a.send(START);
+    b.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.text('Shared.');
+    streams[0]!.finish();
+    await vi.waitFor(() => expect(b.sent.at(-1)?.type).toBe('done'));
+    expect(a.sent).toEqual(b.sent);
+    expect(streams).toHaveLength(1);
+  });
+
+  it("a card whose Port is already gone stops neither the answer nor the other cards", async () => {
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const [gone, card] = [fakePort(), fakePort()];
+    service.serve(gone.port);
+    service.serve(card.port);
+    gone.send(START);
+    card.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    // Chrome throws when a Port closed before its disconnect event arrived.
+    gone.port.postMessage = () => {
+      throw new Error('Attempting to use a disconnected port object');
+    };
+    streams[0]!.text('Still here.');
+    streams[0]!.finish();
+    await vi.waitFor(() => expect(card.sent.at(-1)?.type).toBe('done'));
+    expect(card.sent[0]).toEqual({ type: 'delta', text: 'Still here.' });
+    expect(await listExplanations()).toHaveLength(1);
+  });
+
+  it('a card that joins while the answer is being saved gets the whole text and done', async () => {
+    const { client, streams } = controlledClient();
+    let save: (() => void) | undefined;
+    const service = createExplainService(
+      deps(client, {
+        saveExplanation: async (fields) => {
+          await new Promise<void>((resolve) => (save = resolve));
+          return saveExplanation(fields);
+        },
+      }),
+    );
+    const first = fakePort();
+    service.serve(first.port);
+    first.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.text('Whole answer.');
+    streams[0]!.finish();
+    await vi.waitFor(() => expect(save).toBeDefined());
+    first.disconnect();
+
+    const late = fakePort();
+    service.serve(late.port);
+    late.send(START);
+    save!();
+    await vi.waitFor(() => expect(late.sent.at(-1)?.type).toBe('done'));
+    expect(late.sent[0]).toEqual({ type: 'delta', text: 'Whole answer.' });
+    expect(streams).toHaveLength(1);
+  });
+
+  it('an error reaches every card watching; with none watching nothing is saved, and the next start asks again', async () => {
+    const rejected = APIError.generate(401, { error: { type: 'authentication_error', message: 'invalid x-api-key' } }, 'x', new Headers());
+    const error = { type: 'error', code: 'bad-key', message: 'Your Claude key was rejected', provider: 'claude' };
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const [a, b] = [fakePort(), fakePort()];
+    service.serve(a.port);
+    service.serve(b.port);
+    a.send(START);
+    b.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    streams[0]!.fail(rejected);
+    await vi.waitFor(() => expect(a.sent).toEqual([error]));
+    expect(b.sent).toEqual([error]);
+
+    const closed = fakePort();
+    service.serve(closed.port);
+    closed.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(2)); // the failed answer was dropped: a new request
+    closed.disconnect();
+    streams[1]!.fail(rejected);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(closed.sent).toEqual([]);
+    expect(await listExplanations()).toEqual([]);
+
+    const next = fakePort();
+    service.serve(next.port);
+    next.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(3));
+  });
+
+  it('a silent stream ends the answer for every card, saves nothing, and the next start asks again', async () => {
+    const error = { type: 'error', code: 'network', message: "Couldn't reach Claude", provider: 'claude' };
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client, { idleTimeoutMs: 20 }));
+    const [a, b, closed] = [fakePort(), fakePort(), fakePort()];
+    for (const card of [a, b, closed]) {
+      service.serve(card.port);
+      card.send(START);
+    }
+    closed.disconnect();
+    await vi.waitFor(() => expect(a.sent).toEqual([error]));
+    expect(b.sent).toEqual([error]);
+    expect(closed.sent).toEqual([]);
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.signal.aborted).toBe(true);
+    expect(await listExplanations()).toEqual([]);
+
+    const again = fakePort();
+    service.serve(again.port);
+    again.send(START);
+    await vi.waitFor(() => expect(streams).toHaveLength(2));
+  });
+
+  it('a follow-up whose card closes still finishes and is appended', async () => {
+    const stored = await saveExplanation(STORED);
+    const { client, streams } = controlledClient();
+    const service = createExplainService(deps(client));
+    const card = fakePort();
+    service.serve(card.port);
+    card.send({
+      type: 'follow-up',
+      explanationId: stored.id,
+      question: 'Why "gonna"?',
+      sections: DEFAULT_SETTINGS.cardSections,
+      storySoFar: [],
+    });
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    card.disconnect();
+    streams[0]!.text('It is casual speech.');
+    streams[0]!.finish();
+    await vi.waitFor(async () =>
+      expect((await getExplanation(stored.id))!.followUps).toEqual([{ question: 'Why "gonna"?', answer: 'It is casual speech.' }]),
+    );
+    expect(card.sent).toEqual([]);
+  });
+
+  it('keeps the background alive every 25 s while an answer or follow-up is in progress, then stops', async () => {
+    vi.useFakeTimers();
+    try {
+      const keepAlive = vi.fn();
+      const { client, streams } = controlledClient();
+      const service = createExplainService(deps(client, { keepAlive, idleTimeoutMs: 600_000 }));
+      const [a, b] = [fakePort(), fakePort()];
+      service.serve(a.port);
+      service.serve(b.port);
+      a.send(START);
+      b.send({ type: 'start', request: { ...REQUEST, phrase: 'Night.' } }); // another line: its own answer
+      await vi.waitFor(() => expect(streams).toHaveLength(2));
+      a.disconnect();
+      b.disconnect();
+      expect(keepAlive).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(50_000);
+      expect(keepAlive).toHaveBeenCalledTimes(2);
+      streams[0]!.text('One.');
+      streams[0]!.finish();
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(keepAlive).toHaveBeenCalledTimes(3); // the other answer is still in progress
+
+      streams[1]!.text('Two.');
+      streams[1]!.finish();
+      await vi.waitFor(async () => expect(await listExplanations()).toHaveLength(2));
+      keepAlive.mockClear();
+      await vi.advanceTimersByTimeAsync(100_000);
+      expect(keepAlive).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

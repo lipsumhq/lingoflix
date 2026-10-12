@@ -29,10 +29,10 @@ export interface StreamHandlers {
 }
 
 /**
- * Runs one request over its own Port (spec §6.3). Returns a cancel function; cancelling disconnects,
- * which aborts the request in the background. If the Port drops without an answer (the worker restarted
- * or the extension was reloaded), the card says it couldn't reach LingoFlix's background: only the
- * background knows the key's provider.
+ * Runs one request over its own Port (spec §6.3). Returns a cancel function; cancelling disconnects, and the
+ * background still finishes and saves the answer (finish-answers spec §3.2). If the Port drops without an
+ * answer (the worker restarted or the extension was reloaded), the card says it couldn't reach LingoFlix's
+ * background: only the background knows the key's provider.
  */
 export function streamExplanation(connect: Connect, message: ExplainClientMessage, handlers: StreamHandlers): () => void {
   let finished = false;

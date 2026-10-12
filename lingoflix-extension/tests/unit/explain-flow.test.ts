@@ -381,7 +381,7 @@ describe('explain controller', () => {
     expect(store.get()?.saveStatus).toEqual({});
   });
 
-  it('closing aborts the request and resumes through the pause guard', async () => {
+  it('closing disconnects the Port (the background still finishes the answer) and resumes through the pause guard', async () => {
     const { store, ports, explain, pause } = setupExplain();
     explain.open('shortcut');
     await vi.waitFor(() => expect(ports).toHaveLength(1));

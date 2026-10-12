@@ -19,3 +19,5 @@ export const OPENAI_MAX_OUTPUT_TOKENS = 8000;
 export const OPENAI_API_BASE_URL = 'https://api.openai.com/v1';
 /** Spec §7.4: a stream with no event this long is treated as a network failure (free-own-key spec §4.3). */
 export const AI_IDLE_TIMEOUT_MS = 30_000;
+/** Finish-answers spec §3.4: under Chrome's 30 s idle limit for an extension's background. */
+export const KEEP_ALIVE_MS = 25_000;
