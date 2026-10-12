@@ -6,6 +6,11 @@ export const DONATION_LINKS = [
 /** LingoFlix's site: the install and uninstall pages (free-own-key spec §4.7). */
 export const SITE_URL = 'https://lingoflix.lipsum.fun';
 
+/** The public repository, linked from the options page so anyone can read what LingoFlix sends, and where. */
+export const SOURCE_CODE_URL = 'https://github.com/lipsumhq/lingoflix';
+export const SOURCE_TITLE = 'Open source';
+export const SOURCE_COPY = 'Read the code and see what LingoFlix sends, and where.';
+
 export const DONATION_TITLE = 'Enjoying LingoFlix?';
 export const DONATION_COPY = "It's free forever. A coffee keeps it going.";
 

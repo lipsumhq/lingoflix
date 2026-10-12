@@ -32,6 +32,16 @@ describe('options page', () => {
     expect(screen.getByText('Not affiliated with or endorsed by Netflix.')).toBeTruthy();
   });
 
+  it('links the open-source code on GitHub from the sidebar, in a new tab', async () => {
+    render(<App />);
+    const heading = await screen.findByRole('heading', { name: 'Open source' });
+    expect(heading.closest('section')?.textContent).toContain('Read the code and see what LingoFlix sends, and where.');
+    const link = screen.getByRole('link', { name: 'View on GitHub' });
+    expect(link.getAttribute('href')).toBe('https://github.com/lipsumhq/lingoflix');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
   it('the stepper changes Rewind seconds', async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: 'Increase Rewind seconds' }));

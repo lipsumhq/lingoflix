@@ -1,6 +1,7 @@
 import { BookOpen, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { DonationCard } from '@/components/DonationCard';
+import { SourceCard } from '@/components/SourceCard';
 import { Logo } from '@/components/Logo';
 import { TipCard } from '@/components/TipCard';
 import { focusRing } from '@/components/styles';
@@ -67,9 +68,10 @@ export function App() {
           {tab === 'study-log' && <StudyLogTab />}
           <p className="text-xs font-semibold text-mute">Not affiliated with or endorsed by Netflix.</p>
         </main>
-        <aside aria-label="Tips and support" className={fullWidth ? 'grid gap-4 md:grid-cols-2' : 'flex flex-col gap-4 lg:pt-[74px]'}>
+        <aside aria-label="Tips, support and source code" className={fullWidth ? 'grid gap-4 md:grid-cols-3' : 'flex flex-col gap-4 lg:pt-[74px]'}>
           <TipCard />
           <DonationCard />
+          <SourceCard />
         </aside>
       </div>
     </div>
