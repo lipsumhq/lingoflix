@@ -851,3 +851,4 @@ Real key, on Netflix, with the new build loaded unpacked from `/Users/jay/Codes/
 2. Hover a line, move away after a second, and hover back within 2 s: the card shows the text so far at once and keeps streaming.
 3. With an OpenAI key, open a card and close it at once, wait 60 s, reopen: the answer is saved (the background stayed alive past 30 s).
 4. Ask a follow-up, close the card at once, reopen the line after 20 s: the follow-up and its answer are there.
+5. Ask a follow-up, close the card at once, reopen the line within a few seconds, ask another follow-up: each question keeps its own answer.

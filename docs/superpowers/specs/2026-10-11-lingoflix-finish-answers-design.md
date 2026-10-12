@@ -1,6 +1,6 @@
 # LingoFlix: Answers Always Finish (design)
 
-Date: 2026-10-11 · Status: approved in conversation, awaiting review of this document
+Date: 2026-10-11 · Status: approved
 
 ## 1. Goal
 
